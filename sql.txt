@@ -1,0 +1,17 @@
+SET FOREIGN_KEY_CHECKS=0;
+-- ----------------------------
+-- Table structure for user_data
+-- ----------------------------
+DROP TABLE IF EXISTS `user_data`;
+CREATE TABLE `user_data` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(30) DEFAULT NULL,
+  `password` varchar(30) DEFAULT NULL,
+  `datas` varchar(300) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `name` (`name`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8;
+-- ----------------------------
+-- Records of user_data
+-- ----------------------------
+INSERT INTO `user_data` VALUES ('1', 'admin', '@passWord', '32');
