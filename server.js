@@ -141,19 +141,32 @@ var getRankDataHandler = function (conn, msg) {
     connection.query(sql, function (error, results, fields) {
         var ack = {}
         ack.msg_id = MsgID.RankDataAck
-        
+
         let datas = []
-        
+
         for (var i = 0; i < results.length; ++i) {
 
             let roleData = JSON.parse(results[i].datas)
             let data = {}
             data.name = roleData.name
-            data.level = roleData.level
-            data.exp = roleData.exp
-            data.coin = roleData.coin
+            data.level = Number(roleData.level)
+            data.exp = Number(roleData.exp)
+            data.coin = Number(roleData.coin)
             datas.push(data)
         }
+
+        datas.sort(
+            (a, b) => {
+                if (a.level == b.level) {
+                    if (a.exp == b.exp) {
+                        return b.coin - a.coin
+                    }
+                    return b.exp - a.exp
+                }
+                return b.level - a.level
+            })
+
+        console.log(datas)
 
         ack.results = datas
         conn.sendText(JSON.stringify(ack))
