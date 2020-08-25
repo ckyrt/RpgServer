@@ -2,6 +2,8 @@ var ws = require("nodejs-websocket");
 var mysql = require('../RpgServer/node_modules/mysql');
 var querystring = require('querystring')
 var MsgID = require('../RpgServer/MsgID')
+var Arena1v1 = require('../RpgServer/Arena1v1')
+var ConnMgr = require('../RpgServer/ConnMgr')
 console.log("开始建立连接...")
 
 // 初始化数据库
@@ -17,6 +19,9 @@ connection.connect()
 console.log('connect mysql ok...')
 
 var msgHandlers = {};
+
+
+
 
 var game1 = null, game2 = null, game1Ready = false, game2Ready = false;
 var server = ws.createServer(function (conn) {
@@ -69,9 +74,11 @@ var server = ws.createServer(function (conn) {
     });
 
     conn.on("close", function (code, reason) {
+        ConnMgr.deleteUserConn(conn)
         console.log("关闭连接")
     });
     conn.on("error", function (code, reason) {
+        ConnMgr.deleteUserConn(conn)
         console.log("异常关闭")
     });
 
@@ -134,6 +141,8 @@ var roleDataUpdateHandler = function (conn, msg) {
         console.log(error);
         console.log(results);
     })
+
+    ConnMgr.addUserConn(msg.name, conn)
 }
 
 var getRankDataHandler = function (conn, msg) {
@@ -145,7 +154,9 @@ var getRankDataHandler = function (conn, msg) {
         let datas = []
 
         for (var i = 0; i < results.length; ++i) {
-
+            console.log('--', results[i].datas)
+            if (results[i].datas == null || results[i].datas == '')
+                continue
             let roleData = JSON.parse(results[i].datas)
             let data = {}
             data.name = roleData.name
@@ -173,8 +184,80 @@ var getRankDataHandler = function (conn, msg) {
     })
 }
 
+var CreateRoomReqHandler = function (conn, msg) {
+    let room = Arena1v1.getRoomByUserName(msg.userName)
+    if (room != null) {
+        console.log('has created one')
+        return
+    }
+    room = Arena1v1.createRoom(msg.roomName)
+    let ntf = Arena1v1.getAllRoomInfoNtf()
+    conn.sendText(JSON.stringify(ntf))
+}
+var JoinRoomReqHandler = function (conn, msg) {
+    let room = Arena1v1.getRoomByUserName(msg.userName)
+    if (room != null) {
+        console.log('has joined one')
+        return
+    }
+    room = Arena1v1.getRoom(msg.room_id)
+    if (room == null) {
+        console.log('not found room')
+        return
+    }
+    room.join(msg.userName)
+    room.broadcastRoomInfo()
+}
+var StartRoomReqHandler = function (conn, msg) {
+    let room = Arena1v1.getRoomByUserName(msg.userName)
+    if (room == null) {
+        console.log('not found room')
+        return
+    }
+    room.start()
+    room.broadcastRoomInfo()
+}
+var ExitRoomReqHandler = function (conn, msg) {
+    let room = Arena1v1.getRoomByUserName(msg.userName)
+    if (room == null) {
+        console.log('not found room')
+        return
+    }
+    room.exit(msg.userName)
+    room.broadcastRoomInfo()
+
+    //此时已经退出房间 需要单独下发
+    let ntf = {}
+    ntf.msg_id = MsgID.RoomInfoNtf
+    ntf.roomInfo = room.getRoomInfo()
+    conn.sendText(JSON.stringify(ntf))
+}
+
+var AllRoomInfoReqHandler = function (conn, msg) {
+    let ntf = Arena1v1.getAllRoomInfoNtf()
+    conn.sendText(JSON.stringify(ntf))
+}
+
+var RoomUserCmdReqHandler = function (conn, msg) {
+    let room = Arena1v1.getRoom(msg.room_id)
+    if (room == null) {
+        console.log('not found room')
+        return
+    }
+    room.broadcastUserCmd(msg.userName, msg.cmd, msg.cmdValue)
+}
+
 
 msgHandlers[MsgID.REGISTER] = registerHandler
 msgHandlers[MsgID.LOGIN] = loginHandler
 msgHandlers[MsgID.SAVE_DATA] = roleDataUpdateHandler
 msgHandlers[MsgID.GET_RANK_DATA] = getRankDataHandler
+
+//arena 1v1 
+msgHandlers[MsgID.CreateRoomReq] = CreateRoomReqHandler
+msgHandlers[MsgID.JoinRoomReq] = JoinRoomReqHandler
+msgHandlers[MsgID.StartRoomReq] = StartRoomReqHandler
+msgHandlers[MsgID.ExitRoomReq] = ExitRoomReqHandler
+msgHandlers[MsgID.AllRoomInfoReq] = AllRoomInfoReqHandler
+msgHandlers[MsgID.RoomUserCmdReq] = RoomUserCmdReqHandler
+
