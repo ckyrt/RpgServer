@@ -14,6 +14,7 @@ var MsgID = {
     RoomUserCmdReq: 1105,
     GetRoleDataReq: 1106,
     ChatReq: 1107,
+    GetLast10ChatReq: 1108,
 
 
     registerAck: 2001,

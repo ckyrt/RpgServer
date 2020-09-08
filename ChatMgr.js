@@ -24,7 +24,7 @@ var ChatMgr = {
         }
         this.last10Chats.push(data)
 
-        let sql = 'insert into chat_data (sender, text, send_time) values (\'' + data.name + '\', \'' + data.text + '\', \'' + data.send_time + '\')'
+        let sql = 'insert into chat_data (sender, text, send_time) values (\'' + data.sender + '\', \'' + data.text + '\', \'' + data.send_time + '\')'
         DB.connection.query(sql, function (error, results, fields) {
             if (error) {
                 console.error(error);
@@ -36,14 +36,27 @@ var ChatMgr = {
     initChatFromSql: function () {
 
         this.last10Chats = []
+        let tmp = this.last10Chats
         let sql = 'select * from chat_data order by send_time DESC limit 10'
         DB.connection.query(sql, function (error, results, fields) {
             for (var i = 0; i < results.length; ++i) {
 
-                this.last10Chats.push({ 'sender': results[i].sender, 'text': results[i].text, 'send_time': results[i].send_time })
+                tmp.push({ 'sender': results[i].sender, 'text': results[i].text, 'send_time': results[i].send_time })
             }
+            tmp.reverse()
         })
-        this.last10Chats.reverse()
+    },
+
+    notifyLast10Chats:function(toConn)
+    {
+        for (var i = 0; i < this.last10Chats.length; ++i) {
+            let data = this.last10Chats[i]
+            var ntf = {}
+            ntf.msg_id = MsgID.ChatNtf
+            ntf.sender = data.sender
+            ntf.text = data.text
+            toConn.sendText(JSON.stringify(ntf))
+        }
     },
 }
 

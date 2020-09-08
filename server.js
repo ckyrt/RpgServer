@@ -8,6 +8,7 @@ var ChatMgr = require('../RpgServer/ChatMgr')
 var DB = require('../RpgServer/DB')
 
 DB.init()
+ChatMgr.initChatFromSql()
 
 var msgHandlers = {};
 
@@ -261,6 +262,10 @@ var ChatReqHandler = function (conn, msg) {
     ChatMgr.addChat(msg.sender, msg.text)
 }
 
+var GetLast10ChatReqHandler = function (conn, msg) {
+    ChatMgr.notifyLast10Chats(conn)
+}
+
 
 msgHandlers[MsgID.REGISTER] = registerHandler
 msgHandlers[MsgID.LOGIN] = loginHandler
@@ -279,4 +284,5 @@ msgHandlers[MsgID.GetRoleDataReq] = GetRoleDataReqHandler
 
 //chat
 msgHandlers[MsgID.ChatReq] = ChatReqHandler
+msgHandlers[MsgID.GetLast10ChatReq] = GetLast10ChatReqHandler
 
