@@ -19,6 +19,13 @@ var ConnMgr = {
 
     getUserConn: function (name) {
         return this.userConns[name]
+    },
+
+    visitAllConn:function(f)
+    {
+        for (let key in this.userConns) {
+            f(this.userConns[key])
+        }
     }
 }
 

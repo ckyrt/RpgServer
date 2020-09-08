@@ -1,44 +1,35 @@
-var ws = require("nodejs-websocket");
-var mysql = require('../RpgServer/node_modules/mysql');
+var ws = require("nodejs-websocket")
+var mysql = require('../RpgServer/node_modules/mysql')
 var querystring = require('querystring')
 var MsgID = require('../RpgServer/MsgID')
 var Arena1v1 = require('../RpgServer/Arena1v1')
 var ConnMgr = require('../RpgServer/ConnMgr')
-console.log("开始建立连接...")
+var ChatMgr = require('../RpgServer/ChatMgr')
+var DB = require('../RpgServer/DB')
 
-// 初始化数据库
-var connection = mysql.createConnection({
-    //host: '139.155.80.3',
-    user: 'root',
-    //password: '19911008',
-    port: '3306',
-    database: 'rpg',
-});
-console.log('connect mysql start...')
-connection.connect()
-console.log('connect mysql ok...')
+DB.init()
 
 var msgHandlers = {};
 
-
-
-
+console.log("开始建立连接...")
 var game1 = null, game2 = null, game1Ready = false, game2Ready = false;
 var server = ws.createServer(function (conn) {
-
 
 
     conn.on("text", function (str) {
         var msg = JSON.parse(str)
         console.log("收到的信息为:" + str)
         console.log("收到的信息msg.msg_id:" + msg.msg_id)
-        console.log('func:' + msgHandlers[msg.msg_id])
-        msgHandlers[msg.msg_id](conn, msg)
+        let func = msgHandlers[msg.msg_id]
+        console.log('func:' + func)
+
+        if (func)
+            func(conn, msg)
 
         // if (msg.msg_id === "game1") {
         //     game1 = conn;
         //     game1Ready = true;
-        //     conn.sendText("success");
+        //     conn.sendText("success");    
         // }
         // else if (msg.msg_id === "game2") {
         //     game2 = conn;
@@ -47,7 +38,7 @@ var server = ws.createServer(function (conn) {
         // else if (msg.msg_id == 'delete') {
         //     //delete
         //     let sql = 'delete from user_data where name =\'史汪洋\''
-        //     connection.query(sql, function (error, results, fields) {
+        //     DB.connection.query(sql, function (error, results, fields) {
         //         if (error) {
         //             console.error(error);
         //             return;
@@ -86,10 +77,9 @@ var server = ws.createServer(function (conn) {
 console.log("WebSocket建立完毕")
 
 
-
 var registerHandler = function (conn, msg) {
     let sql = 'insert into user_data (name, password) values (\'' + msg.name + '\', \'' + msg.password + '\')'
-    connection.query(sql, function (error, results, fields) {
+    DB.connection.query(sql, function (error, results, fields) {
 
         var ack = {}
         ack.msg_id = MsgID.registerAck
@@ -103,7 +93,7 @@ var loginHandler = function (conn, msg) {
     //msg.name
     //msg.password
     let sql = 'select * from user_data where name=\'' + msg.name + '\''
-    connection.query(sql, function (error, results, fields) {
+    DB.connection.query(sql, function (error, results, fields) {
         var ack = {}
         ack.msg_id = MsgID.loginAck
         ack.error = error
@@ -131,7 +121,7 @@ var roleDataUpdateHandler = function (conn, msg) {
     console.log('roleDataUpdateHandler:' + msg)
 
     let sql = 'update user_data set datas = \'' + JSON.stringify(msg) + '\' where name=\'' + msg.name + '\''
-    connection.query(sql, function (error, results, fields) {
+    DB.connection.query(sql, function (error, results, fields) {
         if (error) {
             console.error(error);
             return;
@@ -140,6 +130,11 @@ var roleDataUpdateHandler = function (conn, msg) {
         console.log('update user_data');
         console.log(error);
         console.log(results);
+
+        var ack = {}
+        ack.msg_id = MsgID.SAVE_DATA_ACK
+        ack.error_code = 0
+        conn.sendText(JSON.stringify(ack))
     })
 
     ConnMgr.addUserConn(msg.name, conn)
@@ -147,7 +142,7 @@ var roleDataUpdateHandler = function (conn, msg) {
 
 var getRankDataHandler = function (conn, msg) {
     let sql = 'select * from user_data'
-    connection.query(sql, function (error, results, fields) {
+    DB.connection.query(sql, function (error, results, fields) {
         var ack = {}
         ack.msg_id = MsgID.RankDataAck
 
@@ -247,6 +242,25 @@ var RoomUserCmdReqHandler = function (conn, msg) {
     room.broadcastUserCmd(msg.userName, msg.cmd, msg.cmdValue)
 }
 
+var GetRoleDataReqHandler = function (conn, msg) {
+    if (msg.name == null) {
+        console.log('name is null')
+        return
+    }
+    let sql = 'select * from user_data where name=\'' + msg.name + '\''
+    DB.connection.query(sql, function (error, results, fields) {
+        var ntf = {}
+        ntf.msg_id = MsgID.GetRoleDataNtf
+        ntf.role_name = results[0].name
+        ntf.datas = results[0].datas
+        conn.sendText(JSON.stringify(ntf))
+    })
+}
+
+var ChatReqHandler = function (conn, msg) {
+    ChatMgr.addChat(msg.sender, msg.text)
+}
+
 
 msgHandlers[MsgID.REGISTER] = registerHandler
 msgHandlers[MsgID.LOGIN] = loginHandler
@@ -260,4 +274,9 @@ msgHandlers[MsgID.StartRoomReq] = StartRoomReqHandler
 msgHandlers[MsgID.ExitRoomReq] = ExitRoomReqHandler
 msgHandlers[MsgID.AllRoomInfoReq] = AllRoomInfoReqHandler
 msgHandlers[MsgID.RoomUserCmdReq] = RoomUserCmdReqHandler
+
+msgHandlers[MsgID.GetRoleDataReq] = GetRoleDataReqHandler
+
+//chat
+msgHandlers[MsgID.ChatReq] = ChatReqHandler
 
