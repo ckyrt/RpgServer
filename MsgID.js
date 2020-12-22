@@ -28,6 +28,26 @@ var MsgID = {
     GetRoleDataNtf: 3004,
     ChatNtf: 3005,
 
+    //RPC
+    SM_RPC_CALL:4000,
+
+    //aoi
+    SM_MOVE_NTF: 4001,       //移动
+    SM_APPEAR_NTF: 4002,     //出现
+    SM_DISAPPEAR_NTF: 4003,   //消失
+
+    SM_DROP_ITEM_APPEAR_NTF: 4004,     //掉落物出现
+    SM_DROP_ITEM_DISAPPEAR_NTF: 4005,   //掉落物消失
+    
+
+    CM_MOVE:4050,   //请求移动
+    CM_GET_AOI:4051,   //获取aoi
+    
+    CM_PICK_ITEM:4052,   //拾取物品
+
+
+    //RPC
+    CM_RPC_CALL:5000,
 }
 
 module.exports = MsgID;

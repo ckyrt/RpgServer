@@ -6,11 +6,23 @@ var Arena1v1 = require('../RpgServer/Arena1v1')
 var ConnMgr = require('../RpgServer/ConnMgr')
 var ChatMgr = require('../RpgServer/ChatMgr')
 var DB = require('../RpgServer/DB')
+var roleMgr = require('../RpgServer/roleMgr')
+var mapMgr = require('../RpgServer/mapMgr')
+var MapItemMgr = require('../RpgServer/MapItemMgr')
+var bagMgr = require('../RpgServer/bagMgr')
+var rpc = require('../RpgServer/rpc')
 
 DB.init()
 ChatMgr.initChatFromSql()
+mapMgr.init()
+
+let mapItem = MapItemMgr.createMapItem('铁刀')
+let map1001 = mapMgr.getMap(1001)
+map1001.addItemToMap(mapItem.uuid, 10, 10)
+
 
 var msgHandlers = {};
+var rpcHandlers = {};
 
 console.log("开始建立连接...")
 var game1 = null, game2 = null, game1Ready = false, game2Ready = false;
@@ -21,62 +33,44 @@ var server = ws.createServer(function (conn) {
         var msg = JSON.parse(str)
         console.log("收到的信息为:" + str)
         console.log("收到的信息msg.msg_id:" + msg.msg_id)
-        let func = msgHandlers[msg.msg_id]
+
+        let func = null
+        if (MsgID.CM_RPC_CALL == msg.msg_id) {
+            func = rpcHandlers[msg.f_name]
+            if (func)
+                func(msg.args)
+            return
+        }
+        else {
+            func = msgHandlers[msg.msg_id]
+            if (func)
+                func(conn, msg)
+        }
         console.log('func:' + func)
-
-        if (func)
-            func(conn, msg)
-
-        // if (msg.msg_id === "game1") {
-        //     game1 = conn;
-        //     game1Ready = true;
-        //     conn.sendText("success");    
-        // }
-        // else if (msg.msg_id === "game2") {
-        //     game2 = conn;
-        //     game2Ready = true;
-        // }
-        // else if (msg.msg_id == 'delete') {
-        //     //delete
-        //     let sql = 'delete from user_data where name =\'史汪洋\''
-        //     DB.connection.query(sql, function (error, results, fields) {
-        //         if (error) {
-        //             console.error(error);
-        //             return;
-        //         }
-
-        //         console.log('delete shiwangyang');
-        //         console.log(results);
-        //         console.log('\n');
-        //     })
-        // }
-        // else if (msg.msg_id == 'update') {
-        // }
-        // else if (msg.msg_id == 'register') {
-        //     dealRegister(conn, msg)
-        // }
-        // else if (msg.msg_id == 'login') {
-        //     dealLogin(conn, msg)
-        // }
-        // if (game1Ready && game2Ready) {
-        //     game2.sendText(str);
-        // }
-
-        //conn.sendText(str)
     });
 
     conn.on("close", function (code, reason) {
-        ConnMgr.deleteUserConn(conn)
-        console.log("关闭连接")
+        let roleid = ConnMgr.deleteUserConn(conn)
+        console.log("关闭连接:" + roleid)
+        //下线 存一下db
+        if (roleid != null) {
+            roleMgr.getRole(roleid).saveDBPos()
+            bagMgr.deleteBag(roleid)
+        }
+
     });
     conn.on("error", function (code, reason) {
-        ConnMgr.deleteUserConn(conn)
-        console.log("异常关闭")
+        let roleid = ConnMgr.deleteUserConn(conn)
+        console.log("异常关闭:" + roleid)
+        //下线 存一下db
+        if (roleid != null) {
+            roleMgr.getRole(roleid).saveDBPos()
+            bagMgr.deleteBag(roleid)
+        }
     });
 
 }).listen(8001)
 console.log("WebSocket建立完毕")
-
 
 var registerHandler = function (conn, msg) {
     let sql = 'insert into user_data (name, password) values (\'' + msg.name + '\', \'' + msg.password + '\')'
@@ -86,6 +80,12 @@ var registerHandler = function (conn, msg) {
         ack.msg_id = MsgID.registerAck
         ack.error = error
         ack.results = results
+
+        ConnMgr.addUserConn(msg.name, conn)
+
+        //创建地图角色
+        let role = roleMgr.createRole(msg.name)
+        role.enterMap(1001, 2, 3)
         conn.sendText(JSON.stringify(ack))
     })
 }
@@ -112,6 +112,20 @@ var loginHandler = function (conn, msg) {
             }
 
         }
+
+        ConnMgr.addUserConn(msg.name, conn)
+
+        if (ack.tip == 'login ok') {
+            //获取附近的AOI
+            let role = roleMgr.getRole(msg.name)
+            if (!role) {
+                role = roleMgr.createRole(msg.name)
+                role.enterMap(results[0].map_id, results[0].pos_x, results[0].pos_y)
+            }
+            //初始化背包道具
+            bagMgr.initBag(msg.name)
+        }
+
         conn.sendText(JSON.stringify(ack))
     })
 }
@@ -137,8 +151,6 @@ var roleDataUpdateHandler = function (conn, msg) {
         ack.error_code = 0
         conn.sendText(JSON.stringify(ack))
     })
-
-    ConnMgr.addUserConn(msg.name, conn)
 }
 
 var getRankDataHandler = function (conn, msg) {
@@ -266,6 +278,33 @@ var GetLast10ChatReqHandler = function (conn, msg) {
     ChatMgr.notifyLast10Chats(conn)
 }
 
+var onMoveHandler = function (conn, msg) {
+    let role = roleMgr.getRole(msg.role_id)
+    role.moveTo(msg.to_x, msg.to_y)
+}
+
+var onGetAOIHandler = function (conn, msg) {
+    let role = roleMgr.getRole(msg.role_id)
+    if (role == null)
+        return
+    role.getAOIInfo()
+}
+
+var onPickItemHandler = function (conn, msg) {
+    let role = roleMgr.getRole(msg.role_id)
+    let item = MapItemMgr.getMapItem(msg.uuid)
+    if (role && item) {
+        //玩家添加道具
+        let bag = bagMgr.getBag(msg.role_id)
+        bag.addItemToBag(item.name)
+
+        //地图移除道具
+        let map = mapMgr.getMap(item.map_id)
+        map.deleteItemFromMap(msg.uuid)
+        MapItemMgr.removeMapItem(msg.uuid)
+    }
+}
+
 
 msgHandlers[MsgID.REGISTER] = registerHandler
 msgHandlers[MsgID.LOGIN] = loginHandler
@@ -286,3 +325,124 @@ msgHandlers[MsgID.GetRoleDataReq] = GetRoleDataReqHandler
 msgHandlers[MsgID.ChatReq] = ChatReqHandler
 msgHandlers[MsgID.GetLast10ChatReq] = GetLast10ChatReqHandler
 
+//aoi
+msgHandlers[MsgID.CM_GET_AOI] = onGetAOIHandler
+msgHandlers[MsgID.CM_MOVE] = onMoveHandler
+
+//drop item
+msgHandlers[MsgID.CM_PICK_ITEM] = onPickItemHandler
+
+
+//rpc method
+rpcHandlers['discardItem_s'] = (args) => {
+
+    let roleId = args[0]
+    let item_uuid = args[1]
+
+    //在玩家脚底下 产生一个道具
+    let bag = bagMgr.getBag(roleId)
+    let bag_item = bag.removeItemFromBag(item_uuid)
+    console.log('removeItemFromBag', bag_item)
+
+    let item = MapItemMgr.createMapItemFromBagItem(bag_item)
+    let role = roleMgr.getRole(roleId)
+    if (role == null || item == null)
+        return
+    let map = mapMgr.getMap(role.map_id)
+    map.addItemToMap(item.uuid, role.x, role.y)
+}
+
+//获取玩家背包数据
+rpcHandlers['getAllBagItems_s'] = (args) => {
+
+    let roleId = args[0]
+
+    let bag = bagMgr.getBag(roleId)
+    let bag_items = bag.items
+
+    //客户端背包初始化
+    rpc._call(roleId, 'listAllBagItems_c', [bag_items])
+}
+
+//身上
+rpcHandlers['getAllEquipItems_s'] = (args) => {
+
+    let roleId = args[0]
+
+    let bag = bagMgr.getBag(roleId)
+    let bag_items = bag.items
+
+    //客户端装备初始化
+    rpc._call(roleId, 'listAllEquipItems_c', [bag_items])
+}
+
+//穿装备
+rpcHandlers['wearEquip_s'] = (args) => {
+    let roleId = args[0]
+    let item_uuid = args[1]
+    let pos = args[2]
+
+    let bag = bagMgr.getBag(roleId)
+    let item = bag.getBagItem(item_uuid)
+
+    //从背包取出
+    bag.takeItemFromBagPos(item)
+    bag.wearEquip(item, pos)
+
+    bag.updateDB(item)
+    //客户端同步
+    rpc._call(roleId, 'removeBagItem_c', [item])
+    rpc._call(roleId, 'wearEquip_c', [item, pos])
+}
+
+//脱装备
+rpcHandlers['takeoffEquip_s'] = (args) => {
+
+    let roleId = args[0]
+    let item_uuid = args[1]
+
+    let bag = bagMgr.getBag(roleId)
+    let item = bag.getBagItem(item_uuid)
+    let old_pos = item.pos
+    bag.takeoffEquip(item)
+
+    //脱下放到背包
+    bag.putItemToBagPos(item)
+
+    bag.updateDB(item)
+    //客户端同步
+    rpc._call(roleId, 'addBagItem_c', [item])
+    rpc._call(roleId, 'takeoffEquip_c', [old_pos])
+}
+
+//跳地图
+rpcHandlers['jumpMap_s'] = (args) => {
+
+    let roleId = args[0]
+    let to_mapid = args[1]
+    let to_x = args[2]
+    let to_y = args[3]
+
+    let role = roleMgr.getRole(roleId)
+
+    role.leaveMap()
+    role.enterMap(parseInt(to_mapid), parseInt(to_x), parseInt(to_y))
+    role.getAOIInfo()
+}
+
+//user_script
+rpcHandlers['get_user_script_s'] = (args) => {
+    let roleId = args[0]
+    //load from db
+    let role = roleMgr.getRole(roleId)
+    role.getUserScript((str) => {
+        rpc._call(roleId, 'load_user_script_c', [str])
+    })
+}
+rpcHandlers['save_user_script_s'] = (args) => {
+    let roleId = args[0]
+    let str = args[1]
+    //save to db
+    let role = roleMgr.getRole(roleId)
+    role.saveUserScript(str)
+}

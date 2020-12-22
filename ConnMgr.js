@@ -12,7 +12,7 @@ var ConnMgr = {
         for (let key in this.userConns) {
             if (this.userConns[key] == conn) {
                 delete this.userConns.key
-                break
+                return key
             }
         }
     },
