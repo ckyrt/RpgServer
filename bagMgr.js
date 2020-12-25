@@ -2,6 +2,7 @@ var mapMgr = require('../RpgServer/mapMgr')
 var DB = require('../RpgServer/DB')
 var global = require('../RpgServer/global')
 var rpc = require('../RpgServer/rpc')
+var itemConfig = require('../RpgServer/cfg/itemConfig')
 
 let head = 1001
 let l_hand = 1002
@@ -16,6 +17,7 @@ let bag_max_pos = 1100
 
 
 let initRoleBag = function (roleid) {
+    var RoleMgr = require('../RpgServer/roleMgr')
     let bag = {
         //背包所有道具
         items: {},
@@ -140,12 +142,37 @@ let initRoleBag = function (roleid) {
             else {
                 console.log('this pos already has an item: ' + pos)
             }
+
+            //更新属性
+            let cfg = itemConfig[item.name]
+            this._update_owner_attr('attack', cfg.attrs.add_attack, true)
+            this._update_owner_attr('crit_rate', cfg.attrs.crit_rate, true)
+            this._update_owner_attr('crit_multi', cfg.attrs.crit_multi, true)
         },
 
         takeoffEquip: function (item) {
             let pos = item.pos
             item.pos = -1
             this.equip_items[pos] = null
+
+            //更新属性
+            let cfg = itemConfig[item.name]
+            this._update_owner_attr('attack', cfg.attrs.add_attack, false)
+            this._update_owner_attr('crit_rate', cfg.attrs.crit_rate, false)
+            this._update_owner_attr('crit_multi', cfg.attrs.crit_multi, false)
+        },
+
+        _update_owner_attr: function (att, add, bWear) {
+            if (add && add > 0) {
+                add = bWear ? add : -1 * add
+                let role = RoleMgr.getRole(this.owner)
+                let old_v = role.getAttr(att)
+                let new_v = old_v + add
+                role.setAttr(att, new_v)
+                console.log('_update_owner_attr', att, new_v)
+                //更新通知客户端
+                rpc._call(this.owner, 'setAttr', [this.owner, att, new_v])
+            }
         },
 
 

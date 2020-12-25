@@ -293,12 +293,17 @@ var _createMap = (map_id) => {
 
         //通知出现
         _notifyRoleAppear(to_role_id, appear_role_id, map_id, pos) {
+
+            let appear_role = RoleMgr.getRole(appear_role_id)
+
             var ntf = {}
             ntf.msg_id = MsgID.SM_APPEAR_NTF
             ntf.role_id = appear_role_id
             ntf.map_id = map_id
             ntf.x = pos.x
             ntf.y = pos.y
+            ntf.hp = appear_role.getAttr('hp')
+            ntf.max_hp = appear_role.getAttr('max_hp')
             let conn = ConnMgr.getUserConn(to_role_id)
             conn.sendText(JSON.stringify(ntf))
 
@@ -373,8 +378,13 @@ var _createMap = (map_id) => {
             conn.sendText(JSON.stringify(ntf))
         },
 
-
-
+        //某地点广播
+        _bc_at_map_point: function (x, y, f) {
+            let zones = this._getCanSeeZones(x, y)
+            this.vistZonesRole(zones, (to_role_id) => {
+                f(to_role_id)
+            })
+        },
 
 
 

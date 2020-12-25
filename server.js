@@ -18,7 +18,7 @@ ChatMgr.initChatFromSql()
 mapMgr.init()
 Skill.init()
 
-let mapItem = MapItemMgr.createMapItem('铁刀')
+let mapItem = MapItemMgr.createMapItem('水晶剑')
 let map1001 = mapMgr.getMap(1001)
 map1001.addItemToMap(mapItem.uuid, 10, 10)
 
@@ -59,7 +59,7 @@ var server = ws.createServer(function (conn) {
             let role = roleMgr.getRole(roleid)
             if (role) {
                 role.saveDBPos()
-                bagMgr.deleteBag(roleid)
+                //bagMgr.deleteBag(roleid)
             }
         }
 
@@ -70,7 +70,7 @@ var server = ws.createServer(function (conn) {
         //下线 存一下db
         if (roleid != null) {
             roleMgr.getRole(roleid).saveDBPos()
-            bagMgr.deleteBag(roleid)
+            //bagMgr.deleteBag(roleid)
         }
     });
 
@@ -126,9 +126,9 @@ var loginHandler = function (conn, msg) {
             if (!role) {
                 role = roleMgr.createRole(msg.name)
                 role.enterMap(results[0].map_id, results[0].pos_x, results[0].pos_y)
+                //初始化背包道具
+                bagMgr.initBag(msg.name)
             }
-            //初始化背包道具
-            bagMgr.initBag(msg.name)
         }
 
         conn.sendText(JSON.stringify(ack))
@@ -462,10 +462,22 @@ rpcHandlers['cast_skill'] = (args) => {
     }
 
     Skill.generate_skill(role)
+    let map = mapMgr.getMap(role.map_id)
+    map._bc_at_map_point(role.x, role.y, (to_role_id) => {
+        rpc._call(to_role_id, 'cast_skill', [roleId])
+    })
+}
+
+//revive
+rpcHandlers['revive_s'] = (args) => {
+    let roleId = args[0]
+    let role = roleMgr.getRole(roleId)
+
+    role.setAttr('hp', role.getAttr('max_hp'))
 
     let map = mapMgr.getMap(role.map_id)
-    let old_zones = map._getCanSeeZones(role.x, role.y)
-    map.vistZonesRole(old_zones, (to_role_id) => {
-        rpc._call(to_role_id, 'cast_skill', [roleId])
+    map._bc_at_map_point(role.x, role.y, (to_role_id) => {
+        map._notifyRoleDisAppear(to_role_id, roleId, role.map_id)
+        map._notifyRoleAppear(to_role_id, roleId, role.map_id, { 'x': role.x, 'y': role.y })
     })
 }

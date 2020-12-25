@@ -20,7 +20,7 @@ var Role = {
                 'camp': 1,
 
                 'crit_rate': 10,
-                'crit_multi': 10,
+                'crit_multi': 2,
                 'fanshang_rate': 10,
                 'avoid_rate': 10,
                 'accurate_rate': 10,
