@@ -8,6 +8,7 @@ var ChatMgr = require('../RpgServer/ChatMgr')
 var DB = require('../RpgServer/DB')
 var roleMgr = require('../RpgServer/roleMgr')
 var mapMgr = require('../RpgServer/mapMgr')
+var Skill = require('../RpgServer/Skill')
 var MapItemMgr = require('../RpgServer/MapItemMgr')
 var bagMgr = require('../RpgServer/bagMgr')
 var rpc = require('../RpgServer/rpc')
@@ -15,6 +16,7 @@ var rpc = require('../RpgServer/rpc')
 DB.init()
 ChatMgr.initChatFromSql()
 mapMgr.init()
+Skill.init()
 
 let mapItem = MapItemMgr.createMapItem('铁刀')
 let map1001 = mapMgr.getMap(1001)
@@ -54,8 +56,11 @@ var server = ws.createServer(function (conn) {
         console.log("关闭连接:" + roleid)
         //下线 存一下db
         if (roleid != null) {
-            roleMgr.getRole(roleid).saveDBPos()
-            bagMgr.deleteBag(roleid)
+            let role = roleMgr.getRole(roleid)
+            if (role) {
+                role.saveDBPos()
+                bagMgr.deleteBag(roleid)
+            }
         }
 
     });
@@ -445,4 +450,22 @@ rpcHandlers['save_user_script_s'] = (args) => {
     //save to db
     let role = roleMgr.getRole(roleId)
     role.saveUserScript(str)
+}
+
+//cast skill
+rpcHandlers['cast_skill'] = (args) => {
+    let roleId = args[0]
+    let role = roleMgr.getRole(roleId)
+
+    if (role.getAttr('hp') <= 0) {
+        console.log('dead can not cast skill')
+    }
+
+    Skill.generate_skill(role)
+
+    let map = mapMgr.getMap(role.map_id)
+    let old_zones = map._getCanSeeZones(role.x, role.y)
+    map.vistZonesRole(old_zones, (to_role_id) => {
+        rpc._call(to_role_id, 'cast_skill', [roleId])
+    })
 }

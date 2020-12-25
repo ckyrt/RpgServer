@@ -372,6 +372,38 @@ var _createMap = (map_id) => {
             let conn = ConnMgr.getUserConn(to_role_id)
             conn.sendText(JSON.stringify(ntf))
         },
+
+
+
+
+
+
+
+        //技能相关
+
+        _is_same_line: function (x1, y1, x2, y2) {
+            return x1 == x2 || y1 == y2
+        },
+
+        _distance: function (x1, y1, x2, y2) {
+            return Math.abs(x1 - x2) + Math.abs(y1 - y2)
+        },
+
+        //访问生物
+        _get_pos_radius_entities: function (x, y, r, filter = null) {
+            console.log('_get_pos_radius_entities', x, y, r, filter)
+            let rets = []
+            let zones = this._getCanSeeZones(x, y)
+            this.vistZonesRole(zones, (role_id) => {
+                let role = RoleMgr.getRole(role_id)
+                if(role && this._distance(x, y, role.x, role.y) <= r)
+                {
+                    if (filter && filter(role_id) || !filter)
+                    rets.push(role_id)
+                }
+            })
+            return rets
+        },
     }
     return map
 }

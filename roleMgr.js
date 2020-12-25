@@ -9,6 +9,39 @@ var Role = {
             x: 0,
             y: 0,
             map_id: 0,
+            allAttrs: {
+                'hp': 100,
+                'max_hp': 100,
+                'attack': 18,
+                'defend': 5,
+                'name': 'xx',
+                'exp': 10,
+                'coin': 10,
+                'camp': 1,
+
+                'crit_rate': 10,
+                'crit_multi': 10,
+                'fanshang_rate': 10,
+                'avoid_rate': 10,
+                'accurate_rate': 10,
+                'suck_rate': 10,
+                'suck_percent': 10,
+            },
+
+            setAttr: function (att, v) {
+                let v1 = this.getAttr(att)
+                if (v == v1)
+                    return
+                this.allAttrs[att] = v
+            },
+
+            getAttr: function (att) {
+                if (!this.allAttrs.hasOwnProperty(att))
+                    return null
+                return this.allAttrs[att]
+            },
+
+
 
             getAOIInfo: function () {
                 let map_id = this.map_id
@@ -57,8 +90,7 @@ var Role = {
             },
 
             //save script
-            saveUserScript:function(str)
-            {
+            saveUserScript: function (str) {
                 let sql = 'update user_data set user_script = \'' + str + '\' where name=\'' + this.roleId + '\''
                 DB.connection.query(sql, function (error, results, fields) {
 
@@ -72,8 +104,7 @@ var Role = {
                 })
             },
 
-            getUserScript:function(f)
-            {
+            getUserScript: function (f) {
                 let sql = 'select * from user_data where name=\'' + this.roleId + '\''
                 DB.connection.query(sql, function (error, results, fields) {
                     let str = results[0].user_script
