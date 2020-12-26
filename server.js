@@ -12,15 +12,11 @@ var Skill = require('../RpgServer/Skill')
 var MapItemMgr = require('../RpgServer/MapItemMgr')
 var bagMgr = require('../RpgServer/bagMgr')
 var rpc = require('../RpgServer/rpc')
+var itemConfig = require('../RpgServer/cfg/itemConfig')
 
 DB.init()
 ChatMgr.initChatFromSql()
 mapMgr.init()
-Skill.init()
-
-let mapItem = MapItemMgr.createMapItem('水晶剑')
-let map1001 = mapMgr.getMap(1001)
-map1001.addItemToMap(mapItem.uuid, 10, 10)
 
 
 var msgHandlers = {};
@@ -301,7 +297,7 @@ var onPickItemHandler = function (conn, msg) {
     if (role && item) {
         //玩家添加道具
         let bag = bagMgr.getBag(msg.role_id)
-        bag.addItemToBag(item.name)
+        bag.addCfgItemToBag(item.name)
 
         //地图移除道具
         let map = mapMgr.getMap(item.map_id)
@@ -309,7 +305,6 @@ var onPickItemHandler = function (conn, msg) {
         MapItemMgr.removeMapItem(msg.uuid)
     }
 }
-
 
 msgHandlers[MsgID.REGISTER] = registerHandler
 msgHandlers[MsgID.LOGIN] = loginHandler
@@ -366,7 +361,7 @@ rpcHandlers['getAllBagItems_s'] = (args) => {
     let bag_items = bag.items
 
     //客户端背包初始化
-    rpc._call(roleId, 'listAllBagItems_c', [bag_items])
+    rpc._call(roleId, 'listAllBagItems_c', [bag_items, bag.getCoin()])
 }
 
 //身上
@@ -392,8 +387,9 @@ rpcHandlers['wearEquip_s'] = (args) => {
 
     //从背包取出
     bag.takeItemFromBagPos(item)
-    bag.wearEquip(item, pos)
-
+    let ret = bag.wearEquip(item, pos)
+    if (!ret)
+        return
     bag.updateDB(item)
     //客户端同步
     rpc._call(roleId, 'removeBagItem_c', [item])
@@ -409,7 +405,9 @@ rpcHandlers['takeoffEquip_s'] = (args) => {
     let bag = bagMgr.getBag(roleId)
     let item = bag.getBagItem(item_uuid)
     let old_pos = item.pos
-    bag.takeoffEquip(item)
+    let ret = bag.takeoffEquip(item)
+    if (!ret)
+        return
 
     //脱下放到背包
     bag.putItemToBagPos(item)
@@ -418,6 +416,68 @@ rpcHandlers['takeoffEquip_s'] = (args) => {
     //客户端同步
     rpc._call(roleId, 'addBagItem_c', [item])
     rpc._call(roleId, 'takeoffEquip_c', [old_pos])
+}
+
+//使用道具
+rpcHandlers['useItem_s'] = (args) => {
+
+    let roleId = args[0]
+    let item_uuid = args[1]
+
+    let bag = bagMgr.getBag(roleId)
+    let item = bag.getBagItem(item_uuid)
+    let cfg = itemConfig[item.name]
+
+    if ('治疗药膏' == item.name) {
+        let role = roleMgr.getRole(roleId)
+        let creature = role.creature
+        let curHp = creature.getAttr('hp')
+        let max_hp = creature.getAttr('max_hp')
+        curHp += 100
+        if (curHp > max_hp)
+            curHp = max_hp
+        creature.setAttr('hp', curHp)
+        //广播血量变化
+        let map = mapMgr.getMap(role.map_id)
+        map._bc_at_map_point(role.x, role.y, (to_role_id) => {
+            rpc._call(to_role_id, 'setAttr', [creature.uuid, 'hp', curHp])
+        })
+        //扣道具
+        bag.removeItemFromBag(item_uuid)
+    }
+
+}
+
+//购买道具
+rpcHandlers['buyItem_s'] = (args) => {
+
+    let roleId = args[0]
+    let item_name = args[1]
+
+    let cfg = itemConfig[item_name]
+    let bag = bagMgr.getBag(roleId)
+
+    //扣钱
+    let ret = bag.addCoin(-1 * cfg.price)
+    if (ret) {
+        //成功 增加道具
+        bag.addCfgItemToBag(item_name)
+    }
+}
+
+//出售道具
+rpcHandlers['sellItem_s'] = (args) => {
+
+    let roleId = args[0]
+    let item_uuid = args[1]
+    
+    let bag = bagMgr.getBag(roleId)
+    let item = bag.getBagItem(item_uuid)
+
+    //扣道具 加钱
+    let cfg = itemConfig[item.name]
+    let ret = bag.addCoin(cfg.price)
+    bag.removeItemFromBag(item_uuid)
 }
 
 //跳地图
@@ -457,14 +517,14 @@ rpcHandlers['cast_skill'] = (args) => {
     let roleId = args[0]
     let role = roleMgr.getRole(roleId)
 
-    if (role.getAttr('hp') <= 0) {
+    if (role.creature.getAttr('hp') <= 0) {
         console.log('dead can not cast skill')
     }
 
     Skill.generate_skill(role)
     let map = mapMgr.getMap(role.map_id)
     map._bc_at_map_point(role.x, role.y, (to_role_id) => {
-        rpc._call(to_role_id, 'cast_skill', [roleId])
+        rpc._call(to_role_id, 'cast_skill', [role.creature.uuid])
     })
 }
 
@@ -473,7 +533,7 @@ rpcHandlers['revive_s'] = (args) => {
     let roleId = args[0]
     let role = roleMgr.getRole(roleId)
 
-    role.setAttr('hp', role.getAttr('max_hp'))
+    role.creature.setAttr('hp', role.creature.getAttr('max_hp'))
 
     let map = mapMgr.getMap(role.map_id)
     map._bc_at_map_point(role.x, role.y, (to_role_id) => {

@@ -1,12 +1,15 @@
 var MsgID = require('../RpgServer/MsgID')
 var ConnMgr = require('../RpgServer/ConnMgr')
 var rpc = require('../RpgServer/rpc')
+var mapConfig = require('../RpgServer/cfg/mapConfig')
+var global = require('../RpgServer/global')
 
 var ZONE_WIDTH = 10
 var ZONE_HEIGHT = 10
 
 var _createMap = (map_id) => {
 
+    var MonsterMgr = require('../RpgServer/MonsterMgr')
     var RoleMgr = require('../RpgServer/roleMgr')
     var MapItemMgr = require('../RpgServer/MapItemMgr')
     let map_zones = {}
@@ -19,6 +22,8 @@ var _createMap = (map_id) => {
                 roles: {},
                 //格子上掉落物
                 items: {},
+                //monster
+                monsters: {},
             }
         }
     }
@@ -53,7 +58,7 @@ var _createMap = (map_id) => {
 
         //获取区域的信息
         getAOIInfo: function (roleId, map_id, x, y) {
-            rpc._call(roleId, 'getAOI_c', [map_id])
+            rpc._call(roleId, 'getAOI_c', [map_id, mapConfig[map_id].map_name])
             let old_zones = this._getCanSeeZones(x, y)
 
             console.log('getAOIInfo', roleId, map_id, x, y, old_zones.length, this.getZone(x, y))
@@ -68,6 +73,13 @@ var _createMap = (map_id) => {
                 //给roleId 发送 uuid appear 消息
                 let item = MapItemMgr.getMapItem(uuid)
                 this._notifyDropItemAppear(roleId, item, map_id, { x: item.x, y: item.y })
+            })
+
+            //怪物
+            this.visitZonesMonster(old_zones, (uuid) => {
+                //给roleId 发送 uuid appear 消息
+                let monster = MonsterMgr.getMonster(uuid)
+                this._notifyMonsterAppear(roleId, monster)
             })
         },
 
@@ -117,6 +129,11 @@ var _createMap = (map_id) => {
             this.vistZonesDropItem(old_zones, (uuid) => {
                 //给自己发送所有 掉落物 消失的消息
                 this._notifyDropItemDisAppear(roleId, uuid, map_id)
+            })
+
+            this.visitZonesMonster(old_zones, (uuid) => {
+                //给自己发送所有 怪物 消失的消息
+                this._notifyMonsterDisAppear(roleId, uuid, map_id)
             })
 
             delete (zone.roles[roleId])
@@ -192,6 +209,19 @@ var _createMap = (map_id) => {
                     let item = MapItemMgr.getMapItem(uuid)
                     this._notifyDropItemAppear(roleId, item, map_id, { x: item.x, y: item.y })
                 })
+
+
+                //怪物
+                this.visitZonesMonster(disappear_zones, (uuid) => {
+                    //给自己发送所有 怪物 消失的消息
+                    this._notifyMonsterDisAppear(roleId, uuid)
+                })
+
+                this.visitZonesMonster(appear_zones, (uuid) => {
+                    //给roleId 发送 怪物 出现 消息
+                    let monster = MonsterMgr.getMonster(uuid)
+                    this._notifyMonsterAppear(roleId, monster)
+                })
             }
 
         },
@@ -226,6 +256,20 @@ var _createMap = (map_id) => {
         vistZonesDropItem: function (p_zones, f) {
             for (var i = 0; i < p_zones.length; i++) {
                 this.vistZoneDropItem(p_zones[i], f)
+            }
+        },
+
+        //visit grid monster
+        visitZoneMonster: function (zone, f) {
+            for (var uuid in zone.monsters) {
+                f(uuid)
+            }
+        },
+
+        //visit grids monster
+        visitZonesMonster: function (p_zones, f) {
+            for (var i = 0; i < p_zones.length; i++) {
+                this.visitZoneMonster(p_zones[i], f)
             }
         },
 
@@ -302,8 +346,9 @@ var _createMap = (map_id) => {
             ntf.map_id = map_id
             ntf.x = pos.x
             ntf.y = pos.y
-            ntf.hp = appear_role.getAttr('hp')
-            ntf.max_hp = appear_role.getAttr('max_hp')
+            ntf.hp = appear_role.creature.getAttr('hp')
+            ntf.max_hp = appear_role.creature.getAttr('max_hp')
+            ntf.creature_uuid = appear_role.creature.uuid
             let conn = ConnMgr.getUserConn(to_role_id)
             conn.sendText(JSON.stringify(ntf))
 
@@ -378,6 +423,82 @@ var _createMap = (map_id) => {
             conn.sendText(JSON.stringify(ntf))
         },
 
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////怪物
+
+        //进入地图
+        addMonsterToMap: function (monster, x, y) {
+            monster.map_id = this.map_id
+            monster.x = x
+            monster.y = y
+            monster.born_pos_.x = x
+            monster.born_pos_.y = y
+
+            let zone = this.getZone(x, y)
+            zone.monsters[monster.creature.uuid] = 1
+
+            this._bc_at_map_point(x, y,
+                (to_role_id) => {
+                    this._notifyMonsterAppear(to_role_id, monster)
+                })
+        },
+
+        //离开地图
+        deleteMonsterFromMap: function (uuid) {
+            let monster = MonsterMgr.getMonster(uuid)
+            if (monster == null)
+                return
+
+            let zone = this.getZone(monster.x, monster.y)
+            this._bc_at_map_point(monster.x, monster.y,
+                (to_role_id) => {
+                    this._notifyMonsterDisAppear(to_role_id, uuid)
+                })
+
+            delete (zone.monsters[uuid])
+        },
+
+        //怪物出現
+        _notifyMonsterAppear(to_role_id, monster) {
+            rpc._call(to_role_id, 'monster_appear', [monster.creature.uuid, monster.name, monster.creature.getAttr('max_hp'), monster.creature.getAttr('hp'), monster.x, monster.y])
+        },
+
+        //怪物出現
+        _notifyMonsterDisAppear(to_role_id, uuid) {
+            rpc._call(to_role_id, 'monster_disappear', [uuid])
+        },
+
+        //怪物移动
+        _onMonsterMove: function (monster, from_pos, to_pos) {
+            console.log('_onMonsterMove', monster.uuid, from_pos, to_pos)
+            if (this.isSameZone(from_pos, to_pos)) {
+                this._bc_at_map_point(from_pos.x, from_pos.y,
+                    (to_role_id) => {
+                        this._notifyMove(to_role_id, monster.uuid, this.map_id, from_pos, to_pos)
+                    })
+            }
+            else {
+                //跨区域
+                {
+                    let from_zone = this.getZone(from_pos.x, from_pos.y)
+                    let to_zone = this.getZone(to_pos.x, to_pos.y)
+                    to_zone.monsters[monster.uuid] = 1
+                    delete (from_zone.monsters[monster.uuid])
+                }
+
+                this._bc_at_map_point(from_pos.x, from_pos.y,
+                    (to_role_id) => {
+                        this._notifyMonsterDisAppear(to_role_id, monster.uuid)
+                    })
+                this._bc_at_map_point(to_pos.x, to_pos.y,
+                    (to_role_id) => {
+                        this._notifyMonsterAppear(to_role_id, monster)
+                    })
+            }
+        },
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////技能
+
         //某地点广播
         _bc_at_map_point: function (x, y, f) {
             let zones = this._getCanSeeZones(x, y)
@@ -386,35 +507,217 @@ var _createMap = (map_id) => {
             })
         },
 
-
-
-
-        //技能相关
-
         _is_same_line: function (x1, y1, x2, y2) {
             return x1 == x2 || y1 == y2
         },
 
-        _distance: function (x1, y1, x2, y2) {
-            return Math.abs(x1 - x2) + Math.abs(y1 - y2)
-        },
-
         //访问生物
-        _get_pos_radius_entities: function (x, y, r, filter = null) {
-            console.log('_get_pos_radius_entities', x, y, r, filter)
+        _get_pos_radius_creatures: function (x, y, r, filter = null) {
             let rets = []
             let zones = this._getCanSeeZones(x, y)
             this.vistZonesRole(zones, (role_id) => {
                 let role = RoleMgr.getRole(role_id)
-                if(role && this._distance(x, y, role.x, role.y) <= r)
-                {
-                    if (filter && filter(role_id) || !filter)
-                    rets.push(role_id)
+                if (role && global._distance(x, y, role.x, role.y) <= r) {
+                    if (filter && filter(role.creature.uuid) || !filter)
+                        rets.push(role.creature.uuid)
                 }
             })
+
+            this.visitZonesMonster(zones, (uuid) => {
+                let monster = MonsterMgr.getMonster(uuid)
+                if (monster && global._distance(x, y, monster.x, monster.y) <= r) {
+                    if (filter && filter(monster.creature.uuid) || !filter)
+                        rets.push(monster.creature.uuid)
+                }
+            })
+
             return rets
         },
+
+
+        ///////////////////////////////////////////////////////////////////////寻路相关///////////////////////////////////////////////////////////////////////
+        initGrid: function (gridData) {
+            console.log('initGrid', gridData)
+            this.neighborPos = [
+                { row: 0, col: 1 },
+                { row: 0, col: -1 },
+                { row: 1, col: 0 },
+                { row: -1, col: 0 },
+
+                //{ row: -1, col: -1 },
+                //{ row: -1, col: 1 },
+                //{ row: 1, col: -1 },
+                //{ row: 1, col: 1 },
+            ]
+
+            //节点类型
+            this.NodeType = {
+                road: 0,
+                wall: 1,
+                start: 2,
+                target: 3,
+            }
+
+            this.nodeMap = {};
+            //地图 阻挡
+            this._map = gridData//.reverse()
+
+            this.min_x = 0
+            this.min_y = 0
+            this.max_x = this._map[0].length - 1
+            this.max_y = this._map.length - 1
+        },
+
+        findPath(curX, curY, targetX, targetY) {
+            if (targetX < this.min_x || targetX > this.max_x)
+                return
+            if (targetY < this.min_y || targetY > this.max_y)
+                return
+            let row = curY
+            let col = curX
+            this.startNode = { row, col }
+            row = targetY
+            col = targetX
+            this.targetNode = { row, col }
+            let currentNode = this.startSearch()
+            //console.timeEnd("time:")
+            return currentNode
+        },
+
+        //开始搜索路径
+        startSearch() {
+            this.GridLists = [];            //待访问列表
+            this.visitedGridLists = [];    //已经访问过的节点
+            this.startNode.stepCount = 0; //记步
+            this.computeWeight(this.startNode);//计算开始位置权重
+            this.GridLists[0] = this.startNode;
+            while (this.GridLists.length > 0) {
+                //查找最小权重的节点
+                let currentGrid = this.findMinWeight();
+                //查找并且添加邻居节点到待访问列表
+                this.findAndAddNeighborNode(currentGrid);
+                //把当前节点添加到已访问列表
+                this.addNodeToList(this.visitedGridLists, currentGrid);
+                //判断是否是目标
+                if (this.isTarget(currentGrid)) {
+                    return currentGrid
+                }
+            }
+            return null;
+        },
+
+        addNodeToList(list, node) {
+            if (!list[node.row]) {
+                list[node.row] = [];
+            }
+            list[node.row][node.col] = node;
+        },
+
+        //查找并且添加邻居节点到待访问列表
+        findAndAddNeighborNode(node) {
+            for (var i = 0, len = this.neighborPos.length; i < len; i++) {
+                const element = this.neighborPos[i];
+                let row = node.row + element.row;
+                let col = node.col + element.col;
+                //边界处理
+                if (row < this._map.length && row >= 0 && col < this._map[0].length && col >= 0) {
+                    let neighborNode = { row, col };
+                    if (this._canNotPass(col, row)) {
+                        continue;
+                    }
+                    //如果未访问就添加到带访问列表
+                    if ((!this.visitedGridLists[row] || !this.visitedGridLists[row][col]) && !this.isExistList(this.GridLists, neighborNode)) {
+                        //设置父节点，为了存储最终路径
+                        neighborNode.parent = node;
+                        //计算权重
+                        let sum = element.row + element.col
+                        let w = (sum == 2 || sum == -2 || sum == 0) ? 1.4 : 1
+
+                        neighborNode.stepCount = node.stepCount + w;
+                        this.computeWeight(neighborNode);
+                        this.GridLists.push(neighborNode);
+                        // this.addNodeToList(this.GridLists,neighborNode)
+                    }
+                }
+            }
+        },
+
+        isTarget(currentGrid) {
+            return currentGrid.row == this.targetNode.row && currentGrid.col == this.targetNode.col
+        },
+
+        //查找最小权重的节点
+        findMinWeight() {
+            let minWeightNode = this.GridLists[0];
+            let minIndex = 0;
+            for (var i = 0, len = this.GridLists.length; i < len; i++) {
+                for (var j = 0, _len = this.GridLists[i].length; j < _len; j++) {
+                    const node = this.GridLists[i][j];
+                    if (minWeightNode.weight > node.weight) {
+                        minWeightNode = node
+                        minIndex = index
+                    }
+                }
+            }
+            this.GridLists.splice(minIndex, 1);
+            if (!minWeightNode) {
+                debugger;
+            }
+            return minWeightNode;
+        },
+
+        //     /**计算权重
+        //  * 公式：
+        //  * 
+        //  * F = G + H
+        //  * G: 从起点到当前格子的成本，也就是步数
+        //  * H: 从当前格子到目标的距离（不考虑障碍的情况下）。
+        //  * 
+        //  * F 值越小，就越接近目标，优先考虑最小的。 
+        //  */
+        computeWeight(node) {
+            let horizontalPathLength = Math.abs(this.targetNode.col - node.col);
+            let verticalPathLength = Math.abs(this.targetNode.row - node.row);
+            let H = horizontalPathLength + verticalPathLength;
+            //F = H + G
+            node.weight = H + node.stepCount;
+            // node.weight = H ;
+            return node.weight;
+        },
+
+        isExistList(list, node) {
+            for (var i = 0, len = list.length; i < len; i++) {
+                const element = list[i];
+                if (element.row == node.row && element.col == node.col) {
+                    return true;
+                }
+            }
+            return false;
+        },
+
+        //得到位置的阻挡数据 1 2 3
+        getGridDataByXY: function (x, y) {
+            return this._map[y][x]
+        },
+
+        _canNotPass: function (x, y) {
+            if (x > this.max_x || x < this.min_x)
+                return true
+            if (y > this.max_y || y < this.min_y)
+                return true
+
+            let v = this._map[y][x]
+            return (v & 2) > 0 || (v & 1) == 0
+        },
+
+        isGridShadow: function (x, y) {
+            let v = this._map[y][x]
+            return (v & 4) > 0
+        },
     }
+
+    map.initGrid(mapConfig[map.map_id].gridData)
+
     return map
 }
 
@@ -425,11 +728,76 @@ var mapMgr = {
     init: function () {
         this.maps[1001] = _createMap(1001)
         this.maps[1002] = _createMap(1002)
+
+        var Skill = require('../RpgServer/Skill')
+        var MonsterMgr = require('../RpgServer/MonsterMgr')
+        var MapItemMgr = require('../RpgServer/MapItemMgr')
+        setInterval(() => {
+            let now = (new Date()).valueOf()
+            MonsterMgr._update500(now)
+            this._update_timer_funcs(now)
+        }, 500);
+
+        setInterval(() => {
+            let now = (new Date()).valueOf()
+            Skill._update_skills(now)
+        }, 100);
+
+        setInterval(() => {
+            let now = (new Date()).valueOf()
+            MonsterMgr._update1000(now)
+        }, 1000);
+
+        let map = this.getMap(1001)
+        let monster = MonsterMgr.createMonster('强盗')
+        map.addMonsterToMap(monster, 2, 2)
+
+        let mapItem = MapItemMgr.createMapItem('水晶剑')
+        map.addItemToMap(mapItem.uuid, 10, 10)
     },
 
     getMap: function (map_id) {
         return this.maps[map_id]
-    }
+    },
+
+    timer_funcs_: [],
+    setTimer: function (f, delay) {
+        let tf = { 'func': f, 'time_point': (new Date()).valueOf() + delay }
+        if (this.timer_funcs_.length == 0) {
+            this.timer_funcs_.push(tf)
+            return
+        }
+
+        //顺序查找，插入合适的位置，从 小 ---> 大
+        //可优化 二分查找
+        for (var i = 0; i < this.timer_funcs_.length; ++i) {
+            let time_point = this.timer_funcs_[i].time_point
+            if (time_point > tf.time_point) {
+                this.timer_funcs_.splice(i, 0, tf)
+                break
+            }
+        }
+    },
+
+    _update_timer_funcs: function (now) {
+        let wait_deletes = []
+        let wait_exec = []
+        let num = 0
+        for (var i = 0; i < this.timer_funcs_.length; ++i) {
+            let tf = this.timer_funcs_[i]
+            if (now < tf.time_point)
+                break
+
+            wait_exec.push(tf)
+            num++
+        }
+        if (num > 0)
+            this.timer_funcs_.splice(0, num)
+
+        for (var i = 0; i < wait_exec.length; ++i) {
+            wait_exec[i].func()
+        }
+    },
 }
 
 module.exports = mapMgr;

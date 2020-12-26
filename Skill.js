@@ -2,6 +2,7 @@ var global = require('../RpgServer/global')
 var mapMgr = require('../RpgServer/mapMgr')
 var RoleMgr = require('../RpgServer/roleMgr')
 var rpc = require('../RpgServer/rpc')
+var Creature = require('../RpgServer/Creature')
 
 var Skill = null
 
@@ -42,12 +43,12 @@ var temp = {
 
             _collect_targets: function () {
                 let map = mapMgr.getMap(this.map_id)
-                this.targets = map._get_pos_radius_entities(this.x, this.y, this.radius, (uid) => { return uid != this.caster })
+                this.targets = map._get_pos_radius_creatures(this.x, this.y, this.radius, (creature_uuid) => { return creature_uuid != this.caster })
             },
 
             _execute: function () {
                 for (var i = 0; i < this.targets.length; ++i) {
-                    Skill._computeDamage(RoleMgr.getRole(this.caster), RoleMgr.getRole(this.targets[i]))
+                    Skill._computeDamage(Creature.getCreature(this.caster), Creature.getCreature(this.targets[i]))
                 }
             },
 
@@ -64,24 +65,17 @@ var temp = {
 
 Skill = {
 
-    skills_: {},
+    skills_: [],
     bigmap_script: null,
 
-    init: function () {
-        var myInterval = setInterval(() => {
-            let now = (new Date()).valueOf()
-            this._update_skills(now)
-        }, 300);
-    },
-
-    generate_skill: function (role) {
+    generate_skill: function (ent) {
         let sk = temp.create_skill()
         sk.uid = this._generate_skill_uid()
         sk.cast_time = (new Date()).valueOf()
-        sk.map_id = role.map_id
-        sk.x = role.x
-        sk.y = role.y
-        sk.caster = role.roleId
+        sk.map_id = ent.map_id
+        sk.x = ent.x
+        sk.y = ent.y
+        sk.caster = ent.creature.uuid
         this._add_skill(sk)
         return sk
     },
@@ -96,30 +90,29 @@ Skill = {
 
     //skill
     _add_skill(skill) {
-        this.skills_[skill.uid] = skill
+        //this.skills_[skill.uid] = skill
+        this.skills_.push(skill)
         return skill
     },
 
-    _remove_skill: function (uid) {
-        this.skills_[uid] = null
-        delete (this.skills_[uid])
-    },
+    // _remove_skill: function (uid) {
+    //     this.skills_[uid] = null
+    //     delete (this.skills_[uid])
+    // },
 
-    _get_skill: function (uid) {
-        return this.skills_[uid]
-    },
+    // _get_skill: function (uid) {
+    //     return this.skills_[uid]
+    // },
 
     _update_skills: function (now) {
         let need_deletes = []
-        for (var k in this.skills_) {
-            let s = this.skills_[k]
+        for (var i = 0; i < this.skills_.length; ++i) {
+            let s = this.skills_[i]
             s.update(now)
             if (s.canDestroy(now)) {
-                need_deletes.push(s)
+                this.skills_.splice(i, 1)
+                i--;
             }
-        }
-        for (var i = 0; i < need_deletes.length; ++i) {
-            this._remove_skill(need_deletes[i].uid)
         }
     },
 
@@ -229,33 +222,24 @@ Skill = {
         }
     },
 
-    _addUnitHp: function (unit, hp) {
-        let curHp = unit.getAttr('hp')
+    _addUnitHp: function (creature, hp) {
+        let curHp = creature.getAttr('hp')
         curHp += hp
-        unit.setAttr('hp', curHp)
+        creature.setAttr('hp', curHp)
 
         //广播掉血
-        this._bc_at_map_point(unit.map_id, unit.x, unit.y,
-            (to_role_id) => {
-                rpc._call(to_role_id, 'setAttr', [unit.roleId, 'hp', curHp])
-            })
-        this._playNumberJump(hp, unit)
+        let map = mapMgr.getMap(creature.entity.map_id)
+        map._bc_at_map_point(creature.entity.x, creature.entity.y, (to_role_id) => {
+            rpc._call(to_role_id, 'setAttr', [creature.uuid, 'hp', curHp])
+        })
+        this._playNumberJump(hp, creature)
     },
 
     //广播跳字
-    _playNumberJump: function (txt, unit) {
-        this._bc_at_map_point(unit.map_id, unit.x, unit.y,
-            (to_role_id) => {
-                rpc._call(to_role_id, '_playNumberJump', [txt, unit.roleId])
-            })
-    },
-
-    //地图某点广播
-    _bc_at_map_point: function (map_id, x, y, f) {
-        let map = mapMgr.getMap(map_id)
-        let zones = map._getCanSeeZones(x, y)
-        map.vistZonesRole(zones, (to_role_id) => {
-            f(to_role_id)
+    _playNumberJump: function (txt, creature) {
+        let map = mapMgr.getMap(creature.entity.map_id)
+        map._bc_at_map_point(creature.entity.x, creature.entity.y, (to_role_id) => {
+            rpc._call(to_role_id, '_playNumberJump', [txt, creature.uuid])
         })
     },
 }

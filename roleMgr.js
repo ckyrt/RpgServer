@@ -1,47 +1,15 @@
 var mapMgr = require('../RpgServer/mapMgr')
 var DB = require('../RpgServer/DB')
+var Creature = require('../RpgServer/Creature')
 
 var Role = {
 
-    createRole: function (roleId) {
+    create_Role: function (roleId) {
         return {
             roleId: roleId,
             x: 0,
             y: 0,
             map_id: 0,
-            allAttrs: {
-                'hp': 100,
-                'max_hp': 100,
-                'attack': 18,
-                'defend': 5,
-                'name': 'xx',
-                'exp': 10,
-                'coin': 10,
-                'camp': 1,
-
-                'crit_rate': 10,
-                'crit_multi': 2,
-                'fanshang_rate': 10,
-                'avoid_rate': 10,
-                'accurate_rate': 10,
-                'suck_rate': 10,
-                'suck_percent': 10,
-            },
-
-            setAttr: function (att, v) {
-                let v1 = this.getAttr(att)
-                if (v == v1)
-                    return
-                this.allAttrs[att] = v
-            },
-
-            getAttr: function (att) {
-                if (!this.allAttrs.hasOwnProperty(att))
-                    return null
-                return this.allAttrs[att]
-            },
-
-
 
             getAOIInfo: function () {
                 let map_id = this.map_id
@@ -120,7 +88,10 @@ var roleMgr = {
     roles: {},
 
     createRole: function (roleId) {
-        let role = Role.createRole(roleId)
+        let role = Role.create_Role(roleId)
+        let creature = Creature.create_creature(role)
+        role.creature = creature
+
         this.roles[roleId] = role
         return role
     },

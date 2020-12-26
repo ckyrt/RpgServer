@@ -22,9 +22,26 @@ let initRoleBag = function (roleid) {
         //背包所有道具
         items: {},
         owner: roleid,
+        coin: 1000,
+
+        //铜钱
+        addCoin: function (c) {
+            let ret = this.coin + c
+            if (ret <= 0) {
+                return false
+            }
+            //客户端同步
+            rpc._call(this.owner, 'refreshCoin_c', [ret])
+            this.coin = ret
+            return true
+        },
+
+        getCoin: function () {
+            return this.coin
+        },
 
         //背包添加道具
-        addItemToBag: function (cfg_name) {
+        addCfgItemToBag: function (cfg_name) {
 
             let item = {
                 uuid: global.generateUUID(),
@@ -141,6 +158,7 @@ let initRoleBag = function (roleid) {
             }
             else {
                 console.log('this pos already has an item: ' + pos)
+                return false
             }
 
             //更新属性
@@ -148,11 +166,19 @@ let initRoleBag = function (roleid) {
             this._update_owner_attr('attack', cfg.attrs.add_attack, true)
             this._update_owner_attr('crit_rate', cfg.attrs.crit_rate, true)
             this._update_owner_attr('crit_multi', cfg.attrs.crit_multi, true)
+            return true
         },
 
         takeoffEquip: function (item) {
             let pos = item.pos
             item.pos = -1
+
+            let pos_item = this.equip_items[pos]
+            if (pos_item != item) {
+                console.log('this pos item is not the request item ' + pos)
+                return false
+            }
+
             this.equip_items[pos] = null
 
             //更新属性
@@ -160,15 +186,16 @@ let initRoleBag = function (roleid) {
             this._update_owner_attr('attack', cfg.attrs.add_attack, false)
             this._update_owner_attr('crit_rate', cfg.attrs.crit_rate, false)
             this._update_owner_attr('crit_multi', cfg.attrs.crit_multi, false)
+            return true
         },
 
         _update_owner_attr: function (att, add, bWear) {
             if (add && add > 0) {
                 add = bWear ? add : -1 * add
                 let role = RoleMgr.getRole(this.owner)
-                let old_v = role.getAttr(att)
+                let old_v = role.creature.getAttr(att)
                 let new_v = old_v + add
-                role.setAttr(att, new_v)
+                role.creature.setAttr(att, new_v)
                 console.log('_update_owner_attr', att, new_v)
                 //更新通知客户端
                 rpc._call(this.owner, 'setAttr', [this.owner, att, new_v])
@@ -189,6 +216,7 @@ let initRoleBag = function (roleid) {
         putItemToBagPos: function (item, pos) {
             if (pos == null)
                 pos = this._getDefaultBagPos()
+            console.log('putItemToBagPos ', item, pos)
             if (this.bag_items[pos] == null) {
                 item.pos = pos
                 this.bag_items[pos] = item
@@ -203,18 +231,6 @@ let initRoleBag = function (roleid) {
             item.pos = -1
             this.bag_items[pos] = null
         },
-
-        takePosItemFromBag: function (pos) {
-            if (this.bag_items[pos] == null) {
-                console.log('this pos has no item ' + pos)
-            }
-            else {
-                let item = this.bag_items[pos]
-                item.pos = -1
-                this.bag_items[pos] = null
-            }
-        },
-
     }
 
     bag.initFromDB()
