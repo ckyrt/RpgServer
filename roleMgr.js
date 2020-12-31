@@ -1,6 +1,7 @@
 var mapMgr = require('../RpgServer/mapMgr')
 var DB = require('../RpgServer/DB')
 var Creature = require('../RpgServer/Creature')
+var rpc = require('../RpgServer/rpc')
 
 var Role = {
 
@@ -10,6 +11,41 @@ var Role = {
             x: 0,
             y: 0,
             map_id: 0,
+
+
+            //铜钱
+            coin: 0,
+            addCoin: function (c) {
+                let ret = this.coin + c
+                if (ret <= 0) {
+                    return false
+                }
+                //客户端同步
+                rpc._call(this.roleId, 'refreshCoin_c', [ret, c])
+                this.coin = ret
+                return true
+            },
+
+            getCoin: function () {
+                return this.coin
+            },
+
+            //经验
+            exp: 0,
+            addExp: function (c) {
+                let ret = this.exp + c
+                if (ret <= 0) {
+                    return false
+                }
+                //客户端同步
+                rpc._call(this.roleId, 'refreshExp_c', [ret, c])
+                this.exp = ret
+                return true
+            },
+
+            getExp: function () {
+                return this.exp
+            },
 
             getAOIInfo: function () {
                 let map_id = this.map_id
@@ -41,13 +77,16 @@ var Role = {
                 this.y = y
             },
 
+            teleport: function (to_map_id, to_x, to_y) {
+                this.leaveMap()
+                this.enterMap(parseInt(to_map_id), parseInt(to_x), parseInt(to_y))
+                this.getAOIInfo()
+            },
 
             //save db
-            saveDBPos: function () {
+            _saveDBPos: function () {
                 let sql = 'update user_data set map_id = \'' + this.map_id + '\', pos_x = \'' + this.x + '\', pos_y = \'' + this.y + '\' where name=\'' + this.roleId + '\''
                 DB.connection.query(sql, function (error, results, fields) {
-
-                    console.log('saveDBPos');
                     console.log(error);
                     console.log(results);
                     if (error) {
@@ -55,6 +94,37 @@ var Role = {
                         return;
                     }
                 })
+            },
+
+            //save coin db
+            _saveDBCoin: function () {
+                let sql = 'update user_data set coin = \'' + this.coin + '\' where name=\'' + this.roleId + '\''
+                DB.connection.query(sql, function (error, results, fields) {
+                    console.log(error);
+                    console.log(results);
+                    if (error) {
+                        console.error(error);
+                        return;
+                    }
+                })
+            },
+            //save exp db
+            _saveDBExp: function () {
+                let sql = 'update user_data set exp = \'' + this.exp + '\' where name=\'' + this.roleId + '\''
+                DB.connection.query(sql, function (error, results, fields) {
+                    console.log(error);
+                    console.log(results);
+                    if (error) {
+                        console.error(error);
+                        return;
+                    }
+                })
+            },
+
+            saveDB: function () {
+                this._saveDBPos()
+                this._saveDBCoin()
+                this._saveDBExp()
             },
 
             //save script
@@ -89,7 +159,7 @@ var roleMgr = {
 
     createRole: function (roleId) {
         let role = Role.create_Role(roleId)
-        let creature = Creature.create_creature(role)
+        let creature = Creature.create_creature(role, 1)
         role.creature = creature
 
         this.roles[roleId] = role

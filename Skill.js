@@ -128,6 +128,11 @@ Skill = {
             return
         }
 
+        if (attacker.is_in_safe_zone()) {
+            console.log('attacker in safe zone')
+            return
+        }
+
         let damage = 0
         let damageType = 'normal'
         //闪避 命中
@@ -187,6 +192,9 @@ Skill = {
 
     //执行伤害
     _executeDamage: function (attacker, unit, damage, reason) {
+
+        unit.set_attacker(attacker.uuid)
+
         if (reason == 'dici') {
             this._addUnitHp(unit, -damage)
         }

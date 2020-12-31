@@ -37,7 +37,7 @@ var ChatMgr = {
 
         this.last10Chats = []
         let tmp = this.last10Chats
-        let sql = 'select * from chat_data order by send_time DESC limit 10'
+        let sql = 'select * from chat_data order by send_time DESC limit 50'
         DB.connection.query(sql, function (error, results, fields) {
             for (var i = 0; i < results.length; ++i) {
 

@@ -1,14 +1,15 @@
+var mapMgr = require('../RpgServer/mapMgr')
 
 var Creature = {
 
     creature_uuid_: 1000,
     creatures_: {},
 
-    create_creature: function (ent) {
+    create_creature: function (ent, c) {
         let creature = {
 
             entity: ent,
-
+            camp: c,    //阵营
             getEntity: function () {
                 return ent
             },
@@ -43,6 +44,25 @@ var Creature = {
                 if (!this.allAttrs.hasOwnProperty(att))
                     return null
                 return this.allAttrs[att]
+            },
+
+            set_attacker: function (attacker_uuid) {
+                //攻击此creature的单位
+                console.log('set_attacker', attacker_uuid)
+                this.last_attacker_uuid_ = attacker_uuid
+            },
+            get_last_attacker: function () {
+                return this.last_attacker_uuid_
+            },
+
+            //是否在安全区
+            is_in_safe_zone: function () {
+                let defender_map_id = this.entity.map_id
+                let x = this.entity.x
+                let y = this.entity.y
+
+                let map = mapMgr.getMap(defender_map_id)
+                return map.is_in_safe_zone(x, y)
             },
         }
 

@@ -1,6 +1,7 @@
 var global = require('../RpgServer/global')
 var mapMgr = require('../RpgServer/mapMgr')
 var RoleMgr = require('../RpgServer/roleMgr')
+var bagMgr = require('../RpgServer/bagMgr')
 var rpc = require('../RpgServer/rpc')
 var Creature = require('../RpgServer/Creature')
 var Skill = require('../RpgServer/Skill')
@@ -39,7 +40,7 @@ var new_PatrolState = (m) => {
         },
 
         update: function (now) {
-            console.log('PatrolState update')
+            //console.log('PatrolState update')
 
             if (this.monster_._check_out_activity_radius()) {
                 this.monster_._change_state(State_BackBornPos)
@@ -112,7 +113,7 @@ var new_PatrolState = (m) => {
                 this.monster_.eye_distance_,
                 (creature_uuid) => {
                     let creature = Creature.getCreature(creature_uuid)
-                    return creature && creature.getAttr('hp') > 0 && creature_uuid != this.monster_.creature.uuid
+                    return creature && creature.getAttr('hp') > 0 && creature.camp != this.monster_.creature.camp
                 }
             )
 
@@ -137,7 +138,7 @@ var new_HasEnemyState = (m) => {
         },
 
         update: function (now) {
-            console.log('HasEnemyState update')
+            //console.log('HasEnemyState update')
 
             if (this.monster_._check_out_activity_radius()) {
                 this.monster_._change_state(State_BackBornPos)
@@ -164,7 +165,7 @@ var new_HasEnemyState = (m) => {
             }
 
             let distance = _get_entity_distance(this.monster_, enemy.entity)
-            console.log('State_Enemy_Found dist: ' + distance, this.monster_.attack_distance_)
+            //console.log('State_Enemy_Found dist: ' + distance, this.monster_.attack_distance_)
             if (distance <= this.monster_.attack_distance_) {
                 this.monster_._change_state(State_Attack)
             }
@@ -189,7 +190,7 @@ var new_AttackState = (m) => {
         },
 
         update: function (now) {
-            console.log('AttackState update')
+            //console.log('AttackState update')
 
             if (!_check_creature_alive(this.monster_.creature.uuid)) {
                 //被打死 进入死亡状态
@@ -203,7 +204,7 @@ var new_AttackState = (m) => {
                 return
             }
             let distance = _get_entity_distance(this.monster_, enemy.entity)
-            console.log('State_Attack dist: ' + distance, this.monster_.attack_distance_)
+            //console.log('State_Attack dist: ' + distance, this.monster_.attack_distance_)
             if (distance <= this.monster_.attack_distance_) {
                 Skill.generate_skill(this.monster_)
                 let map = mapMgr.getMap(this.monster_.map_id)
@@ -227,6 +228,19 @@ var new_DeadState = (m) => {
         enter_time_: -1,
         enter_state: function () {
             this.enter_time_ = (new Date()).valueOf()
+
+
+            //给攻击者 添加经验 金币
+            let attack_uid = this.monster_.creature.get_last_attacker()
+            let attacker = Creature.getCreature(attack_uid)
+            let role_id = attacker.entity.roleId
+
+            if (role_id != null) {
+                let role = RoleMgr.getRole(role_id)
+                role.addCoin(parseInt(Math.random() * 3 + 5))
+                role.addExp(parseInt(Math.random() * 4 + 10))
+                console.log('ddddddddddddddddddddddddd', attack_uid, role_id)
+            }
 
             {
                 let ret = parseInt(Math.random() * 4)
@@ -299,7 +313,7 @@ var new_BackBornState = (m) => {
         enter_state: function () {
             let enemy = _check_creature_alive(this.monster_.enemy_uid_)
             this.monster_.enemy_uid_ = null
-            console.log('back born pos')
+            //console.log('back born pos')
             this.monster_._move_to_pos(this.monster_.born_pos_.x, this.monster_.born_pos_.y, () => {
                 console.log('arrived born pos')
                 this.monster_._change_state(State_Patrol)
@@ -480,7 +494,7 @@ var MonsterMgr = {
 
     createMonster: function (name) {
         let monster = Monster.createMonster()
-        let creature = Creature.create_creature(monster)
+        let creature = Creature.create_creature(monster, 2)
         monster.name = name
         monster.cur_state_ = new_PatrolState(monster)
         monster.born_pos_ = { x: 0, y: 0 }

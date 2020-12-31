@@ -22,23 +22,6 @@ let initRoleBag = function (roleid) {
         //背包所有道具
         items: {},
         owner: roleid,
-        coin: 1000,
-
-        //铜钱
-        addCoin: function (c) {
-            let ret = this.coin + c
-            if (ret <= 0) {
-                return false
-            }
-            //客户端同步
-            rpc._call(this.owner, 'refreshCoin_c', [ret])
-            this.coin = ret
-            return true
-        },
-
-        getCoin: function () {
-            return this.coin
-        },
 
         //背包添加道具
         addCfgItemToBag: function (cfg_name) {
@@ -108,7 +91,7 @@ let initRoleBag = function (roleid) {
             let sql = 'update bag_items set role_id = \'' + item.owner + '\', cfg_name = \'' + item.name + '\', pos = \'' + item.pos + '\' where item_uuid=\'' + item.uuid + '\''
             DB.connection.query(sql, function (error, results, fields) {
 
-                console.log('saveDBPos');
+                console.log('saveDB item');
                 console.log(results);
                 if (error) {
                     console.error(error);

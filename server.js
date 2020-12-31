@@ -54,7 +54,7 @@ var server = ws.createServer(function (conn) {
         if (roleid != null) {
             let role = roleMgr.getRole(roleid)
             if (role) {
-                role.saveDBPos()
+                role.saveDB()
                 //bagMgr.deleteBag(roleid)
             }
         }
@@ -65,13 +65,23 @@ var server = ws.createServer(function (conn) {
         console.log("异常关闭:" + roleid)
         //下线 存一下db
         if (roleid != null) {
-            roleMgr.getRole(roleid).saveDBPos()
+            roleMgr.getRole(roleid).saveDB()
             //bagMgr.deleteBag(roleid)
         }
     });
 
 }).listen(8001)
 console.log("WebSocket建立完毕")
+
+var initRole = function (name, map_id, pos_x, pos_y, coin, exp) {
+    //创建地图角色
+    let role = roleMgr.createRole(name)
+    role.enterMap(map_id, pos_x, pos_y)
+    //初始化背包道具
+    bagMgr.initBag(name)
+    role.coin = coin
+    role.exp = exp
+}
 
 var registerHandler = function (conn, msg) {
     let sql = 'insert into user_data (name, password) values (\'' + msg.name + '\', \'' + msg.password + '\')'
@@ -83,10 +93,7 @@ var registerHandler = function (conn, msg) {
         ack.results = results
 
         ConnMgr.addUserConn(msg.name, conn)
-
-        //创建地图角色
-        let role = roleMgr.createRole(msg.name)
-        role.enterMap(1001, 2, 3)
+        initRole(msg.name, 1001, 2, 3, 0, 0)
         conn.sendText(JSON.stringify(ack))
     })
 }
@@ -120,10 +127,7 @@ var loginHandler = function (conn, msg) {
             //获取附近的AOI
             let role = roleMgr.getRole(msg.name)
             if (!role) {
-                role = roleMgr.createRole(msg.name)
-                role.enterMap(results[0].map_id, results[0].pos_x, results[0].pos_y)
-                //初始化背包道具
-                bagMgr.initBag(msg.name)
+                initRole(msg.name, results[0].map_id, results[0].pos_x, results[0].pos_y, results[0].coin, results[0].exp)
             }
         }
 
@@ -297,12 +301,16 @@ var onPickItemHandler = function (conn, msg) {
     if (role && item) {
         //玩家添加道具
         let bag = bagMgr.getBag(msg.role_id)
+        if (!bag)
+            return
         bag.addCfgItemToBag(item.name)
 
         //地图移除道具
         let map = mapMgr.getMap(item.map_id)
         map.deleteItemFromMap(msg.uuid)
         MapItemMgr.removeMapItem(msg.uuid)
+
+        rpc._call(msg.role_id, 'itemPicked_ack', [item.name])
     }
 }
 
@@ -341,6 +349,8 @@ rpcHandlers['discardItem_s'] = (args) => {
 
     //在玩家脚底下 产生一个道具
     let bag = bagMgr.getBag(roleId)
+    if (!bag)
+        return
     let bag_item = bag.removeItemFromBag(item_uuid)
     console.log('removeItemFromBag', bag_item)
 
@@ -358,10 +368,12 @@ rpcHandlers['getAllBagItems_s'] = (args) => {
     let roleId = args[0]
 
     let bag = bagMgr.getBag(roleId)
-    let bag_items = bag.items
+    let role = roleMgr.getRole(roleId)
+    if (!bag || !role)
+        return
 
     //客户端背包初始化
-    rpc._call(roleId, 'listAllBagItems_c', [bag_items, bag.getCoin()])
+    rpc._call(roleId, 'listAllBagItems_c', [bag.items, role.getCoin()])
 }
 
 //身上
@@ -370,6 +382,8 @@ rpcHandlers['getAllEquipItems_s'] = (args) => {
     let roleId = args[0]
 
     let bag = bagMgr.getBag(roleId)
+    if (!bag)
+        return
     let bag_items = bag.items
 
     //客户端装备初始化
@@ -383,6 +397,8 @@ rpcHandlers['wearEquip_s'] = (args) => {
     let pos = args[2]
 
     let bag = bagMgr.getBag(roleId)
+    if (!bag)
+        return
     let item = bag.getBagItem(item_uuid)
 
     //从背包取出
@@ -403,6 +419,8 @@ rpcHandlers['takeoffEquip_s'] = (args) => {
     let item_uuid = args[1]
 
     let bag = bagMgr.getBag(roleId)
+    if (!bag)
+        return
     let item = bag.getBagItem(item_uuid)
     let old_pos = item.pos
     let ret = bag.takeoffEquip(item)
@@ -425,6 +443,8 @@ rpcHandlers['useItem_s'] = (args) => {
     let item_uuid = args[1]
 
     let bag = bagMgr.getBag(roleId)
+    if (!bag)
+        return
     let item = bag.getBagItem(item_uuid)
     let cfg = itemConfig[item.name]
 
@@ -456,9 +476,14 @@ rpcHandlers['buyItem_s'] = (args) => {
 
     let cfg = itemConfig[item_name]
     let bag = bagMgr.getBag(roleId)
-
+    let role = roleMgr.getRole(roleId)
+    if (!bag)
+        return
+    if (!role)
+        return
     //扣钱
-    let ret = bag.addCoin(-1 * cfg.price)
+
+    let ret = role.addCoin(-1 * cfg.price)
     if (ret) {
         //成功 增加道具
         bag.addCfgItemToBag(item_name)
@@ -470,13 +495,19 @@ rpcHandlers['sellItem_s'] = (args) => {
 
     let roleId = args[0]
     let item_uuid = args[1]
-    
+
     let bag = bagMgr.getBag(roleId)
+    let role = roleMgr.getRole(roleId)
+    if (!bag)
+        return
+    if (!role)
+        return
+
     let item = bag.getBagItem(item_uuid)
 
     //扣道具 加钱
     let cfg = itemConfig[item.name]
-    let ret = bag.addCoin(cfg.price)
+    let ret = role.addCoin(cfg.price)
     bag.removeItemFromBag(item_uuid)
 }
 
@@ -489,10 +520,7 @@ rpcHandlers['jumpMap_s'] = (args) => {
     let to_y = args[3]
 
     let role = roleMgr.getRole(roleId)
-
-    role.leaveMap()
-    role.enterMap(parseInt(to_mapid), parseInt(to_x), parseInt(to_y))
-    role.getAOIInfo()
+    role.teleport(to_mapid, to_x, to_y)
 }
 
 //user_script
@@ -535,9 +563,8 @@ rpcHandlers['revive_s'] = (args) => {
 
     role.creature.setAttr('hp', role.creature.getAttr('max_hp'))
 
-    let map = mapMgr.getMap(role.map_id)
-    map._bc_at_map_point(role.x, role.y, (to_role_id) => {
-        map._notifyRoleDisAppear(to_role_id, roleId, role.map_id)
-        map._notifyRoleAppear(to_role_id, roleId, role.map_id, { 'x': role.x, 'y': role.y })
-    })
+    //暂时都复活到1001
+    let map = mapMgr.getMap(1001)
+    let reborn_pos = map.get_reborn_pos()
+    role.teleport(map.map_id, reborn_pos.x, reborn_pos.y)
 }

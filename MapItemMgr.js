@@ -8,20 +8,18 @@ var MapItemMgr = {
     items: {},
 
     createMapItem: function (cfgName) {
-
-        let item = {
-            uuid: global.generateUUID(),
-            name: cfgName,
-        }
-        this.items[item.uuid] = item
-        return item
+        return this._create_map_item(global.generateUUID(), cfgName)
     },
 
-    createMapItemFromBagItem:function(bagItem)
-    {
+    createMapItemFromBagItem: function (bagItem) {
+        return this._create_map_item(bagItem.uuid, bagItem.name)
+    },
+
+    _create_map_item(uuid, cfg_name) {
         let item = {
-            uuid: bagItem.uuid,
-            name: bagItem.name,
+            uuid: uuid,
+            name: cfg_name,
+            born_time: Date.now()
         }
         this.items[item.uuid] = item
         return item

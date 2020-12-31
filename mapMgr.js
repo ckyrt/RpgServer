@@ -31,6 +31,30 @@ var _createMap = (map_id) => {
     let map = {
         map_id: map_id,
         map_zones: map_zones,
+
+        _update_map_1000: function (now) {
+            for (var i in this.map_zones) {
+                let zone = this.map_zones[i]
+                this._update_zone_items(zone, now)
+            }
+        },
+
+        _update_zone_items: function (zone, now) {
+            //检测地图上掉落物是否超过时间
+            let delets = []
+            for (var id in zone.items) {
+                let item = MapItemMgr.getMapItem(id)
+                if (now - item.born_time > 60000) {
+                    delets.push(id)
+                }
+            }
+
+            for (var i = 0; i < delets.length; ++i) {
+                this.deleteItemFromMap(id)
+                MapItemMgr.removeMapItem(id)
+            }
+        },
+
         //get zome
         getZone: function (x, y) {
             let zone_x = 1 + parseInt(Math.abs(x) / ZONE_WIDTH)
@@ -470,7 +494,7 @@ var _createMap = (map_id) => {
 
         //怪物移动
         _onMonsterMove: function (monster, from_pos, to_pos) {
-            console.log('_onMonsterMove', monster.uuid, from_pos, to_pos)
+            //console.log('_onMonsterMove', monster.uuid, from_pos, to_pos)
             if (this.isSameZone(from_pos, to_pos)) {
                 this._bc_at_map_point(from_pos.x, from_pos.y,
                     (to_role_id) => {
@@ -534,6 +558,34 @@ var _createMap = (map_id) => {
             return rets
         },
 
+        //获取复活位置
+        get_reborn_pos: function () {
+            let reborn_zone = mapConfig[this.map_id].reborn_zone
+            let min_x = reborn_zone.min_xy[0]
+            let min_y = reborn_zone.min_xy[1]
+
+            let max_x = reborn_zone.max_xy[0]
+            let max_y = reborn_zone.max_xy[1]
+
+            let pos_x = global.random(min_x, max_x)
+            let pos_y = global.random(min_y, max_y)
+            return { x: pos_x, y: pos_y }
+        },
+
+        //是否在安全区
+        is_in_safe_zone: function (pos_x, pos_y) {
+            let safe_zone = mapConfig[this.map_id].safe_zone
+            if (!safe_zone)
+                return false
+            let min_x = safe_zone.min_xy[0]
+            let min_y = safe_zone.min_xy[1]
+
+            let max_x = safe_zone.max_xy[0]
+            let max_y = safe_zone.max_xy[1]
+
+            return (pos_x >= min_x && pos_x <= max_x
+                && pos_y >= min_y && pos_y <= max_y)
+        },
 
         ///////////////////////////////////////////////////////////////////////寻路相关///////////////////////////////////////////////////////////////////////
         initGrid: function (gridData) {
@@ -746,14 +798,27 @@ var mapMgr = {
         setInterval(() => {
             let now = (new Date()).valueOf()
             MonsterMgr._update1000(now)
+
+            for (var i in this.maps) {
+                let map = this.maps[i]
+                map._update_map_1000(now)
+            }
         }, 1000);
 
-        let map = this.getMap(1001)
-        let monster = MonsterMgr.createMonster('强盗')
-        map.addMonsterToMap(monster, 2, 2)
 
-        let mapItem = MapItemMgr.createMapItem('水晶剑')
-        map.addItemToMap(mapItem.uuid, 10, 10)
+        let map = this.getMap(1001)
+        {
+            let monster = MonsterMgr.createMonster('强盗')
+            map.addMonsterToMap(monster, 5, 11)
+        }
+        {
+            let monster = MonsterMgr.createMonster('强盗')
+            map.addMonsterToMap(monster, 13, 10)
+        }
+        {
+            let monster = MonsterMgr.createMonster('强盗')
+            map.addMonsterToMap(monster, 17, 3)
+        }
     },
 
     getMap: function (map_id) {
