@@ -173,9 +173,8 @@ var getRankDataHandler = function (conn, msg) {
             let roleData = JSON.parse(results[i].datas)
             let data = {}
             data.name = roleData.name
-            data.level = Number(roleData.level)
-            data.exp = Number(roleData.exp)
-            data.coin = Number(roleData.coin)
+            data.exp = Number(results[i].exp)
+            data.coin = Number(results[i].coin)
             datas.push(data)
         }
 
