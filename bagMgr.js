@@ -64,7 +64,7 @@ let initRoleBag = function (roleid) {
             DB.connection.query(sql, function (error, results, fields) {
 
                 console.log('insertDB');
-                console.log(results);
+                //console.log(results);
                 if (error) {
                     console.error(error);
                     return;
@@ -77,8 +77,8 @@ let initRoleBag = function (roleid) {
             DB.connection.query(sql, function (error, results, fields) {
 
                 console.log('deleteDB');
-                console.log(error);
-                console.log(results);
+                //console.log(error);
+                //console.log(results);
                 if (error) {
                     console.error(error);
                     return;
@@ -197,9 +197,9 @@ let initRoleBag = function (roleid) {
         },
 
         putItemToBagPos: function (item, pos) {
-            if (pos == null)
+            if (pos == null || pos == -1)
                 pos = this._getDefaultBagPos()
-            console.log('putItemToBagPos ', item, pos)
+            //console.log('putItemToBagPos ', item, pos)
             if (this.bag_items[pos] == null) {
                 item.pos = pos
                 this.bag_items[pos] = item

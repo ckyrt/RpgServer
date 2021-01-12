@@ -2,6 +2,7 @@ var mapMgr = require('../RpgServer/mapMgr')
 var DB = require('../RpgServer/DB')
 var Creature = require('../RpgServer/Creature')
 var rpc = require('../RpgServer/rpc')
+var ConnMgr = require('../RpgServer/ConnMgr')
 
 var Role = {
 
@@ -87,8 +88,8 @@ var Role = {
             _saveDBPos: function () {
                 let sql = 'update user_data set map_id = \'' + this.map_id + '\', pos_x = \'' + this.x + '\', pos_y = \'' + this.y + '\' where name=\'' + this.roleId + '\''
                 DB.connection.query(sql, function (error, results, fields) {
-                    console.log(error);
-                    console.log(results);
+                    //console.log(error);
+                    //console.log(results);
                     if (error) {
                         console.error(error);
                         return;
@@ -100,8 +101,8 @@ var Role = {
             _saveDBCoin: function () {
                 let sql = 'update user_data set coin = \'' + this.coin + '\' where name=\'' + this.roleId + '\''
                 DB.connection.query(sql, function (error, results, fields) {
-                    console.log(error);
-                    console.log(results);
+                    //console.log(error);
+                    //console.log(results);
                     if (error) {
                         console.error(error);
                         return;
@@ -112,8 +113,8 @@ var Role = {
             _saveDBExp: function () {
                 let sql = 'update user_data set exp = \'' + this.exp + '\' where name=\'' + this.roleId + '\''
                 DB.connection.query(sql, function (error, results, fields) {
-                    console.log(error);
-                    console.log(results);
+                    //console.log(error);
+                    //console.log(results);
                     if (error) {
                         console.error(error);
                         return;
@@ -133,8 +134,8 @@ var Role = {
                 DB.connection.query(sql, function (error, results, fields) {
 
                     console.log('saveUserScript');
-                    console.log(error);
-                    console.log(results);
+                    //console.log(error);
+                    //console.log(results);
                     if (error) {
                         console.error(error);
                         return;
@@ -168,6 +169,29 @@ var roleMgr = {
 
     getRole: function (roleId) {
         return this.roles[roleId]
+    },
+
+    //访问所有玩家
+    visit_online: function (f) {
+        for (var k in this.roles) {
+            let con = ConnMgr.getUserConn(k)
+            if (con)
+                f(k)
+        }
+    },
+
+    //全服广播
+    rpc_all_roles: function (f_name, params = []) {
+        for (var k in this.roles) {
+            rpc._call(k, f_name, params)
+        }
+    },
+
+    //在线人数
+    get_online_num: function () {
+        let num = 0
+        this.visit_online((k) => { num++ })
+        return num
     },
 }
 

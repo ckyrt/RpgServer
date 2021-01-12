@@ -85,7 +85,7 @@ var _createMap = (map_id) => {
             rpc._call(roleId, 'getAOI_c', [map_id, mapConfig[map_id].map_name])
             let old_zones = this._getCanSeeZones(x, y)
 
-            console.log('getAOIInfo', roleId, map_id, x, y, old_zones.length, this.getZone(x, y))
+            //console.log('getAOIInfo', roleId, map_id, x, y, old_zones.length, this.getZone(x, y))
             this.vistZonesRole(old_zones, (to_role_id) => {
                 //给roleId 发送 to_role_id appear 消息
                 let newRole = RoleMgr.getRole(to_role_id)
@@ -117,7 +117,7 @@ var _createMap = (map_id) => {
                 //给其他人发
                 zone.roles[roleId] = 1
                 let old_zones = this._getCanSeeZones(x, y)
-                console.log('enter map', roleId, map_id, x, y, old_zones, zone.zone_id, zone.roles)
+                //console.log('enter map', roleId, map_id, x, y, old_zones, zone.zone_id, zone.roles)
                 this.vistZonesRole(old_zones, (to_role_id) => {
                     //给 to_role_id 发送 roleId appear 消息
                     //排除自己
@@ -188,9 +188,9 @@ var _createMap = (map_id) => {
                 let old_zones = this._getCanSeeZones(from_pos.x, from_pos.y)
                 let new_zones = this._getCanSeeZones(to_pos.x, to_pos.y)
 
-                console.log('disappear_zones')
+                //console.log('disappear_zones')
                 let disappear_zones = this._getAZonesNotInB(old_zones, new_zones)
-                console.log('appear_zones')
+                //console.log('appear_zones')
                 let appear_zones = this._getAZonesNotInB(new_zones, old_zones)
 
                 this.vistZonesRole(disappear_zones, (to_role_id) => {
@@ -317,16 +317,16 @@ var _createMap = (map_id) => {
 
         _getAZonesNotInB: function (zones_a, zones_b) {
 
-            console.log('zones_a')
+            //console.log('zones_a')
             for (var j = 0; j < zones_a.length; j++) {
-                console.log(zones_a[j].zone_id)
+                //console.log(zones_a[j].zone_id)
             }
-            console.log('zones_b')
+            //console.log('zones_b')
             for (var j = 0; j < zones_b.length; j++) {
-                console.log(zones_b[j].zone_id)
+                //console.log(zones_b[j].zone_id)
             }
 
-            console.log('not_in_b_zones')
+            //console.log('not_in_b_zones')
             let not_in_b_zones = []
             let notFind = true
             for (var i = 0; i < zones_a.length; i++) {
@@ -339,7 +339,7 @@ var _createMap = (map_id) => {
                 }
                 if (notFind) {
                     not_in_b_zones.push(zones_a[i])
-                    console.log(zones_a[i].zone_id)
+                    //console.log(zones_a[i].zone_id)
                 }
             }
             return not_in_b_zones
@@ -356,7 +356,8 @@ var _createMap = (map_id) => {
             ntf.to_x = to_pos.x
             ntf.to_y = to_pos.y
             let conn = ConnMgr.getUserConn(to_role_id)
-            conn.sendText(JSON.stringify(ntf))
+            if (conn)
+                conn.sendText(JSON.stringify(ntf))
         },
 
         //通知出现
@@ -374,9 +375,10 @@ var _createMap = (map_id) => {
             ntf.max_hp = appear_role.creature.getAttr('max_hp')
             ntf.creature_uuid = appear_role.creature.uuid
             let conn = ConnMgr.getUserConn(to_role_id)
-            conn.sendText(JSON.stringify(ntf))
+            if (conn)
+                conn.sendText(JSON.stringify(ntf))
 
-            console.log('_notifyRoleAppear', to_role_id, appear_role_id, map_id, pos)
+            //console.log('_notifyRoleAppear', to_role_id, appear_role_id, map_id, pos)
         },
 
         //通知消失
@@ -386,7 +388,8 @@ var _createMap = (map_id) => {
             ntf.role_id = disappear_role_id
             ntf.map_id = map_id
             let conn = ConnMgr.getUserConn(to_role_id)
-            conn.sendText(JSON.stringify(ntf))
+            if (conn)
+                conn.sendText(JSON.stringify(ntf))
         },
 
         ////////////////////////////////////////////////////////////////////////////////////////////////掉落物
@@ -434,7 +437,8 @@ var _createMap = (map_id) => {
             ntf.x = pos.x
             ntf.y = pos.y
             let conn = ConnMgr.getUserConn(to_role_id)
-            conn.sendText(JSON.stringify(ntf))
+            if (conn)
+                conn.sendText(JSON.stringify(ntf))
         },
 
         //掉落物消失
@@ -444,7 +448,8 @@ var _createMap = (map_id) => {
             ntf.uuid = uuid
             ntf.map_id = map_id
             let conn = ConnMgr.getUserConn(to_role_id)
-            conn.sendText(JSON.stringify(ntf))
+            if (conn)
+                conn.sendText(JSON.stringify(ntf))
         },
 
 
@@ -589,7 +594,7 @@ var _createMap = (map_id) => {
 
         ///////////////////////////////////////////////////////////////////////寻路相关///////////////////////////////////////////////////////////////////////
         initGrid: function (gridData) {
-            console.log('initGrid', gridData)
+            //console.log('initGrid', gridData)
             this.neighborPos = [
                 { row: 0, col: 1 },
                 { row: 0, col: -1 },
@@ -780,6 +785,7 @@ var mapMgr = {
     init: function () {
         this.maps[1001] = _createMap(1001)
         this.maps[1002] = _createMap(1002)
+        this.maps[1003] = _createMap(1003)
 
         var Skill = require('../RpgServer/Skill')
         var MonsterMgr = require('../RpgServer/MonsterMgr')

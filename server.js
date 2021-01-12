@@ -29,8 +29,8 @@ var server = ws.createServer(function (conn) {
 
     conn.on("text", function (str) {
         var msg = JSON.parse(str)
-        console.log("收到的信息为:" + str)
-        console.log("收到的信息msg.msg_id:" + msg.msg_id)
+        //console.log("收到的信息为:" + str)
+        //console.log("收到的信息msg.msg_id:" + msg.msg_id)
 
         let func = null
         if (MsgID.CM_RPC_CALL == msg.msg_id) {
@@ -44,11 +44,12 @@ var server = ws.createServer(function (conn) {
             if (func)
                 func(conn, msg)
         }
-        console.log('func:' + func)
+        //console.log('func:' + func)
     });
 
     conn.on("close", function (code, reason) {
-        let roleid = ConnMgr.deleteUserConn(conn)
+        let roleid = ConnMgr.getConnUserName(conn)
+        ConnMgr.deleteUserConn(roleid)
         console.log("关闭连接:" + roleid)
         //下线 存一下db
         if (roleid != null) {
@@ -56,17 +57,21 @@ var server = ws.createServer(function (conn) {
             if (role) {
                 role.saveDB()
                 //bagMgr.deleteBag(roleid)
+
+                onLogout()
             }
         }
 
     });
     conn.on("error", function (code, reason) {
-        let roleid = ConnMgr.deleteUserConn(conn)
+        let roleid = ConnMgr.getConnUserName(conn)
+        ConnMgr.deleteUserConn(roleid)
         console.log("异常关闭:" + roleid)
         //下线 存一下db
         if (roleid != null) {
             roleMgr.getRole(roleid).saveDB()
             //bagMgr.deleteBag(roleid)
+            //onLogout()
         }
     });
 
@@ -83,6 +88,19 @@ var initRole = function (name, map_id, pos_x, pos_y, coin, exp) {
     role.exp = exp
 }
 
+////////////////////////////////////////////////////在线人数 功能////////////////////////////////////////////////////
+
+var onLogin = function () {
+    roleMgr.rpc_all_roles('online_nums_update_c', [roleMgr.get_online_num()])
+}
+
+var onLogout = function () {
+    roleMgr.rpc_all_roles('online_nums_update_c', [roleMgr.get_online_num()])
+}
+
+////////////////////////////////////////////////////在线人数 功能////////////////////////////////////////////////////
+
+
 var registerHandler = function (conn, msg) {
     let sql = 'insert into user_data (name, password) values (\'' + msg.name + '\', \'' + msg.password + '\')'
     DB.connection.query(sql, function (error, results, fields) {
@@ -91,10 +109,16 @@ var registerHandler = function (conn, msg) {
         ack.msg_id = MsgID.registerAck
         ack.error = error
         ack.results = results
-
-        ConnMgr.addUserConn(msg.name, conn)
-        initRole(msg.name, 1001, 2, 3, 0, 0)
         conn.sendText(JSON.stringify(ack))
+
+        if (error == null) {
+            ConnMgr.addUserConn(msg.name, conn)
+
+            //获取出生点
+            let map = mapMgr.getMap(1001)
+            let reborn_pos = map.get_reborn_pos()
+            initRole(msg.name, 1001, reborn_pos.x, reborn_pos.y, 0, 0)
+        }
     })
 }
 
@@ -118,8 +142,9 @@ var loginHandler = function (conn, msg) {
                 //password wrong
                 ack.tip = 'password is wrong'
             }
-
+            //console.log('results[0]', results[0])
         }
+
 
         ConnMgr.addUserConn(msg.name, conn)
 
@@ -132,6 +157,8 @@ var loginHandler = function (conn, msg) {
         }
 
         conn.sendText(JSON.stringify(ack))
+
+        onLogin()
     })
 }
 
@@ -147,9 +174,9 @@ var roleDataUpdateHandler = function (conn, msg) {
             return;
         }
 
-        console.log('update user_data');
-        console.log(error);
-        console.log(results);
+        //console.log('update user_data');
+        //console.log(error);
+        //console.log(results);
 
         var ack = {}
         ack.msg_id = MsgID.SAVE_DATA_ACK
@@ -189,7 +216,7 @@ var getRankDataHandler = function (conn, msg) {
                 return b.level - a.level
             })
 
-        console.log(datas)
+        //console.log(datas)
 
         ack.results = datas
         conn.sendText(JSON.stringify(ack))
@@ -566,4 +593,57 @@ rpcHandlers['revive_s'] = (args) => {
     let map = mapMgr.getMap(1001)
     let reborn_pos = map.get_reborn_pos()
     role.teleport(map.map_id, reborn_pos.x, reborn_pos.y)
+}
+
+//get_online_num
+rpcHandlers['get_online_num'] = (args) => {
+    let roleId = args[0]
+    rpc._call(roleId, 'online_nums_update_c', [roleMgr.get_online_num()])
+}
+
+//gm
+rpcHandlers['gm'] = (args) => {
+    let roleId = args[0]
+    let str = args[1]
+
+    let strs = str.split(' ')
+    let cmd = strs[0]
+    if (cmd == 'set_attr' && strs.length == 3) {
+        let att = strs[1]
+        let v = strs[2]
+        let role = roleMgr.getRole(roleId)
+        if (att == '10')
+            att = 'attack'
+        if (att == '11')
+            att = 'defend'
+        if (att == '12')
+            att = 'max_hp'
+        if (att == '13')
+            att = 'hp'
+        if (att == '14')
+            att = 'crit_rate'
+        if (att == '15')
+            att = 'crit_multi'
+        if (att == '16')
+            att = 'avoid_rate'
+        if (att == '17')
+            att = 'fanshang_rate'
+        if (att == '18')
+            att = 'suck_rate'
+        if (att == '19')
+            att = 'suck_percent'
+        if (v >= 0 && v <= 1000) {
+            let creature = role.creature
+            let map = mapMgr.getMap(role.map_id)
+            creature.setAttr(att, v)
+            map._bc_at_map_point(role.x, role.y, (to_role_id) => {
+                rpc._call(to_role_id, 'setAttr', [creature.uuid, att, v])
+            })
+
+            rpc._call(roleId, 'gm_ack', ['success'])
+            return
+        }
+    }
+    rpc._call(roleId, 'gm_ack', ['failure'])
+
 }

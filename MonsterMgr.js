@@ -436,7 +436,7 @@ var Monster = {
                 if (to_x == this.target_x_ && to_y == this.target_y_) {
                     return
                 }
-                console.log("_move_to_pos", to_x, to_y)
+                //console.log("_move_to_pos", to_x, to_y)
                 //如果正在移动 就以下一点为起点
                 //否则以当前点为起点
                 let starPoint = null

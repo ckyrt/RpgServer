@@ -24,12 +24,12 @@ var Creature = {
                 'coin': 10,
                 'camp': 1,
 
-                'crit_rate': 10,
+                'crit_rate': 1,
                 'crit_multi': 2,
-                'fanshang_rate': 10,
-                'avoid_rate': 10,
-                'accurate_rate': 10,
-                'suck_rate': 10,
+                'fanshang_rate': 1,
+                'avoid_rate': 1,
+                'accurate_rate': 1,
+                'suck_rate': 1,
                 'suck_percent': 10,
             },
 
